@@ -125,6 +125,7 @@ svg text{font-family:inherit}
     <div class="frow"><label>Projekt</label><input id="emProj" list="projList" placeholder="np. film dla klienta (opcjonalnie)" style="flex:1"><datalist id="projList"></datalist></div>
     <div class="frow"><label>Od</label><input type="time" id="emS"><label style="width:auto">Do</label><input type="time" id="emE"></div>
     <div style="margin:10px 0"><div class="hint" style="margin:0 0 6px">Kategoria:</div><div class="catgrid" id="emCats"></div></div>
+    <div style="margin:10px 0"><div class="hint" style="margin:0 0 6px">Druga kategoria (opcjonalnie, np. transport + sport):</div><div class="catgrid" id="emCats2"></div></div>
     <div class="btnrow">
       <button class="btn primary" id="emSave">Zapisz</button>
       <button class="btn danger" id="emDel">Usuń</button>
@@ -139,6 +140,7 @@ svg text{font-family:inherit}
 const CATS = {
   sen:       {n:"Sen",          e:"😴", c:"#7c6ff0"},
   praca:     {n:"Praca",        e:"💼", c:"#4f9cf9"},
+  tworczosc: {n:"Twórczość",    e:"🎨", c:"#e64fd0"},
   jedzenie:  {n:"Jedzenie",     e:"🍳", c:"#f9a84f"},
   higiena:   {n:"Higiena",      e:"🚿", c:"#4fd8f9"},
   porzadki:  {n:"Porządki",     e:"🧹", c:"#c9a15f"},
@@ -152,6 +154,8 @@ const CATS = {
   inne:      {n:"Inne",         e:"❔", c:"#8a8f98"}
 };
 const KW = [
+  ["swój film","tworczosc"],["swoj film","tworczosc"],["mój film","tworczosc"],["moj film","tworczosc"],
+  ["swojego filmu","tworczosc"],["mojego filmu","tworczosc"],["swoje wideo","tworczosc"],["własny projekt","tworczosc"],["vlog","tworczosc"],
   ["montaż","praca"],["montow","praca"],["montuj","praca"],["edytuj","praca"],["edycj","praca"],
   ["render","praca"],["scenariusz","praca"],["klient","praca"],["mail","praca"],["faktur","praca"],
   ["resolve","praca"],["kolor koryg","praca"],["gradin","praca"],["nagryw","praca"],["kręc","praca"],
@@ -163,16 +167,16 @@ const KW = [
   ["zęb","higiena"],["goli","higiena"],["łazienk","higiena"],
   ["sprząt","porzadki"],["zmyw","porzadki"],["prani","porzadki"],["pior","porzadki"],
   ["naczyni","porzadki"],["śmieci","porzadki"],["porządk","porzadki"],["odkurz","porzadki"],
+  ["jechał","transport"],["jadę","transport"],["dojazd","transport"],["dojecha","transport"],["autobus","transport"],
+  ["pociąg","transport"],["samoch","transport"],["uber","transport"],["tramwaj","transport"],["metro","transport"],["transport","transport"],
   ["trening","sport"],["trenow","sport"],["siłown","sport"],["biega","sport"],["deskorolk","sport"],
-  ["skate","sport"],["wspinacz","sport"],["rower","sport"],["ćwicz","sport"],["rozciąg","sport"],["basen","sport"],
+  ["skate","sport"],["wspinacz","sport"],["ściank","sport"],["rower","sport"],["ćwicz","sport"],["rozciąg","sport"],["basen","sport"],
   ["scroll","strata"],["scrol","strata"],["tiktok","strata"],["instagram","strata"],["insta","strata"],
   ["youtube","strata"],["jutub","strata"],["facebook","strata"],["fejs","strata"],["shorts","strata"],
   ["rolki oglądał","strata"],["leżał","strata"],["marnow","strata"],["nic nie robił","strata"],["przeglądał telefon","strata"],
   ["odpoczy","odpoczynek"],["serial","odpoczynek"],["netflix","odpoczynek"],["czytał","odpoczynek"],
   ["książk","odpoczynek"],["grał","odpoczynek"],["gram ","odpoczynek"],["muzyk","odpoczynek"],
   ["relaks","odpoczynek"],["spacer","odpoczynek"],["medytu","odpoczynek"],["film oglądał","odpoczynek"],["oglądał film","odpoczynek"],
-  ["jechał","transport"],["jadę","transport"],["dojazd","transport"],["autobus","transport"],
-  ["pociąg","transport"],["samoch","transport"],["uber","transport"],["tramwaj","transport"],["metro","transport"],
   ["zakup","zakupy"],["sklep","zakupy"],["biedronk","zakupy"],["lidl","zakupy"],["żabk","zakupy"],["galeri","zakupy"],
   ["spotka","ludzie"],["znajom","ludzie"],["rozmawia","ludzie"],["rodzin","ludzie"],["dziewczyn","ludzie"],
   ["kumpel","ludzie"],["imprez","ludzie"],["dzwonił","ludzie"],
@@ -215,12 +219,17 @@ function dayLabel(k){
 
 /* ============ KATEGORYZACJA ============ */
 function norm(s){ return " "+s.toLowerCase().replace(/\s+/g," ").trim()+" "; }
-function catOf(text){
+function catsOf(text){
   const t = norm(text);
-  for(const k in SET.learned){ if(t.includes(k)) return SET.learned[k]; }
-  for(const [stem,cat] of KW){ if(t.includes(stem)) return cat; }
-  return "inne";
+  const found=[];
+  const push=c=>{ if(c && CATS[c] && !found.includes(c)) found.push(c); };
+  for(const k in SET.learned){ if(t.includes(k)) push(SET.learned[k]); }
+  for(const [stem,cat] of KW){ if(found.length>=2) break; if(t.includes(stem)) push(cat); }
+  // własny film to twórczość, nie praca — "montuję swój film" nie dokłada się do Pracy
+  if(found[0]==="tworczosc" && found[1]==="praca") found.length=1;
+  return found.length? found.slice(0,2) : ["inne"];
 }
+function catOf(text){ return catsOf(text)[0]; }
 function learn(text, cat){
   const t = text.toLowerCase().trim();
   if(t.length>2 && t.length<40){ SET.learned[t]=cat; saveSet(); }
@@ -343,7 +352,8 @@ function parseLocal(text, dateKey){
                 .replace(/\s+(o|od|do|w|na)\s*$/i,"").replace(/\s+/g," ").trim();
     if(!txt) { ctx.last=Math.max(ctx.last, end??t); continue; }
     const fill = DURATIVE.test(cl.toLowerCase()) ? "forward" : (PUNCTUAL.test(cl.toLowerCase()) ? "none" : "forward");
-    events.push({t, end: end!==null && end>t ? end : undefined, txt, cat: catOf(txt), fill, punct: PUNCTUAL.test(cl.toLowerCase())});
+    const cats = catsOf(txt);
+    events.push({t, end: end!==null && end>t ? end : undefined, txt, cat: cats[0], cat2: cats[1], fill, punct: PUNCTUAL.test(cl.toLowerCase())});
     ctx.last = Math.max(ctx.last, (end!==null && end>t)? end : t);
   }
   events.sort((a,b)=>a.t-b.t);
@@ -352,7 +362,7 @@ function parseLocal(text, dateKey){
 
 /* ============ ZDARZENIA → BLOKI ============ */
 function sortBlocks(day){ day.blocks.sort((a,b)=>a.s-b.s); }
-function addBlock(day, s, e, txt, cat, proj){
+function addBlock(day, s, e, txt, cat, proj, cat2){
   // przytnij do wolnych miejsc (bez nakładania na istniejące bloki)
   const isToday_e = e; let segs=[[s, e===null? null : e]];
   for(const b of day.blocks){
@@ -369,7 +379,7 @@ function addBlock(day, s, e, txt, cat, proj){
   for(const [x,y] of segs){
     const yy=y===null?null:y;
     if(yy!==null && yy-x<2) continue;
-    const nb={id:uid(), s:x, e:yy, txt, cat}; if(proj) nb.proj=proj;
+    const nb={id:uid(), s:x, e:yy, txt, cat}; if(proj) nb.proj=proj; if(cat2 && cat2!==cat) nb.cat2=cat2;
     day.blocks.push(nb);
   }
   sortBlocks(day);
@@ -390,7 +400,7 @@ function applyEvents(dateKey, events){
     let end = ev.end!=null ? ev.end : (nx ? nx.t : null);
     if(end!==null && end<=ev.t) continue;
     if(end===null && dateKey!==todayKey()) end=Math.min(ev.t+30,1439); // nie zostawiaj otwartych bloków w przeszłości
-    addBlock(day, ev.t, end, ev.txt, ev.cat, ev.proj);
+    addBlock(day, ev.t, end, ev.txt, ev.cat, ev.proj, ev.cat2);
   }
   save();
 }
@@ -402,6 +412,18 @@ function closeStaleOpen(){
 }
 
 /* ============ AI (Claude API) ============ */
+// Ceny Claude Haiku 4.5: $1 / mln tokenów wejścia, $5 / mln wyjścia
+function usdCost(inTok, outTok){ return inTok*1e-6*1.0 + outTok*1e-6*5.0; }
+function trackUsage(u){
+  if(!u) return;
+  const mk = todayKey().slice(0,7);
+  let s = SET.usage;
+  if(!s) s = SET.usage = {month:mk, in:0, out:0, reqs:0, allIn:0, allOut:0, allReqs:0};
+  if(s.month!==mk){ s.month=mk; s.in=0; s.out=0; s.reqs=0; }
+  s.in += u.input_tokens||0; s.out += u.output_tokens||0; s.reqs++;
+  s.allIn += u.input_tokens||0; s.allOut += u.output_tokens||0; s.allReqs++;
+  saveSet();
+}
 async function callAI(system, user, maxTok){
   const res = await fetch("https://api.anthropic.com/v1/messages",{
     method:"POST",
@@ -410,13 +432,17 @@ async function callAI(system, user, maxTok){
   });
   if(!res.ok) throw new Error("API "+res.status);
   const data = await res.json();
+  trackUsage(data.usage);
   return (data.content&&data.content[0]&&data.content[0].text)||"";
 }
 async function aiParse(text, dateKey){
   const isToday = dateKey===todayKey();
   const catList = Object.keys(CATS).join(", ");
-  const sys = `Analizujesz dyktowany po polsku opis dnia i zamieniasz go na zdarzenia z czasem. Zwróć TYLKO JSON: {"events":[{"t":"HH:MM","txt":"krótki opis czynności","cat":"kategoria","fill":"forward|none","proj":"nazwa projektu (tylko jeśli pada nazwa filmu/projektu/klienta przy pracy)"}]}.
-Kategorie: ${catList}. strata = scrollowanie/social media/bezczynność; odpoczynek = świadomy relaks (serial, książka, spacer); praca = praca zawodowa/montaż filmów.
+  const projs = allProjects();
+  const sys = `Analizujesz dyktowany po polsku opis dnia i zamieniasz go na zdarzenia z czasem. Zwróć TYLKO JSON: {"events":[{"t":"HH:MM","txt":"krótki opis czynności","cat":"kategoria","cat2":"druga kategoria (opcjonalna)","fill":"forward|none","proj":"nazwa projektu (opcjonalna)"}]}.
+Kategorie: ${catList}. strata = scrollowanie/social media/bezczynność; odpoczynek = świadomy relaks (serial, książka, spacer); praca = praca zawodowa dla klientów (montaż, plany zdjęciowe, maile); tworczosc = WŁASNE filmy i projekty artystyczne robione dla siebie ("montuję swój film", "mój film o Norwegii") — to wolny czas, NIE praca.
+cat2: dodaj gdy czynność należy naturalnie do dwóch kategorii naraz, np. "dojazd rowerem" = cat transport + cat2 sport, "gotowałem słuchając podcastu" = jedzenie + odpoczynek. Zwykle cat2 pomijaj.
+proj: gdy pada nazwa filmu/projektu/klienta (przy pracy lub twórczości), podaj KRÓTKĄ nazwę, np. "montuję swój film o Norwegii" → cat "tworczosc", proj "Norwegia". Używaj istniejących nazw projektów jeśli pasują: [${projs.map(p=>'"'+p+'"').join(", ")}]. Ta sama nazwa = czas sumuje się do tego samego projektu.
 fill="forward" gdy czynność trwa od tego momentu do następnego zdarzenia (np. "zacząłem pracować", "umyłem się"); fill="none" gdy to tylko punkt w czasie kończący coś (np. "wstałem", "zjadłem", "wróciłem") — czas przed następnym zdarzeniem pozostaje wtedy nieznany.
 Godziny bez rano/wieczorem interpretuj rozsądnie względem kontekstu. Aktualny czas: ${isToday? hhmm(nowMin()) : "koniec dnia"}. "teraz/właśnie" = aktualny czas. Zdarzenia posortuj chronologicznie.`;
   const txt = await callAI(sys, text, 800);
@@ -428,6 +454,7 @@ Godziny bez rano/wieczorem interpretuj rozsądnie względem kontekstu. Aktualny 
     const cat = CATS[ev.cat]? ev.cat : catOf(ev.txt||"");
     const out={t:Math.min(parseInt(p[1])*60+parseInt(p[2]),1439), txt:String(ev.txt||"").slice(0,80), cat, fill: ev.fill==="none"?"none":"forward"};
     if(ev.proj) out.proj=String(ev.proj).slice(0,40);
+    if(ev.cat2 && CATS[ev.cat2] && ev.cat2!==cat) out.cat2=ev.cat2;
     return out;
   }).filter(Boolean).sort((a,b)=>a.t-b.t);
   return evs;
@@ -436,7 +463,7 @@ async function aiSummary(dateKey){
   const day = getDay(dateKey);
   const lines = day.blocks.map(b=>`${hhmm(b.s)}-${b.e===null?"teraz":hhmm(b.e)} ${CATS[b.cat].n}: ${b.txt}`).join("\n");
   const j = day.journal;
-  const jt = j? `\nDziennik: ${j.txt||""} (samopoczucie ${j.mood??"-"}/10, sen ${j.sen??"-"} h, energia ${j.energia??"-"}/10, stres ${j.stres??"-"}/10${j.sport?", sport: tak":""})` : "";
+  const jt = j? `\nDziennik: ${jBody(j)} (samopoczucie ${j.mood??"-"}/10, sen ${j.sen??"-"} h, energia ${j.energia??"-"}/10, stres ${j.stres??"-"}/10${j.sport?", sport: tak":""})` : "";
   const sys = "Napisz krótkie (4-6 zdań), ciepłe ale szczere podsumowanie dnia po polsku, w 2. osobie. Zauważ co poszło dobrze, delikatnie wskaż stratę czasu jeśli była duża. Bez nagłówków, sam tekst.";
   return await callAI(sys, `Dzień ${dateKey}:\n${lines}${jt}`, 500);
 }
@@ -461,7 +488,9 @@ function dayTotals(dateKey){
   const now = dateKey===todayKey()? nowMin() : 1440;
   for(const b of day.blocks){
     const e = b.e===null? now : b.e;
-    tot[b.cat]=(tot[b.cat]||0)+Math.max(0,e-b.s);
+    const d = Math.max(0,e-b.s);
+    tot[b.cat]=(tot[b.cat]||0)+d;
+    if(b.cat2) tot[b.cat2]=(tot[b.cat2]||0)+d; // czas liczy się do obu kategorii
   }
   return tot;
 }
@@ -545,7 +574,7 @@ function renderDay(){
 
   if(isToday){
     h+=`<div class="card"><div class="hint" style="margin:0 0 8px">⚡ Szybki start — tapnij, co właśnie zaczynasz:</div>
-      <div class="catgrid">${["praca","jedzenie","higiena","porzadki","sport","odpoczynek","strata","transport"].map(k=>`<button class="catchip qstart" data-cat="${k}">${CATS[k].e} ${CATS[k].n}</button>`).join("")}</div>
+      <div class="catgrid">${["praca","tworczosc","jedzenie","higiena","porzadki","sport","odpoczynek","strata","transport"].map(k=>`<button class="catchip qstart" data-cat="${k}">${CATS[k].e} ${CATS[k].n}</button>`).join("")}</div>
     </div>`;
   }
 
@@ -554,7 +583,7 @@ function renderDay(){
     const c=CATS[ob.cat];
     h+=`<div class="blk now" style="border-left-color:${c.c}" data-id="${ob.id}">
       <div class="bt"><div class="btime">TERAZ · od ${hhmm(ob.s)}</div>
-      <div class="btxt">${c.e} ${esc(ob.txt)}</div><div class="bcat">${c.n}${ob.proj?" · 🎬 "+esc(ob.proj):""}</div></div>
+      <div class="btxt">${c.e} ${esc(ob.txt)}</div><div class="bcat">${c.n}${ob.cat2?" + "+CATS[ob.cat2].e+" "+CATS[ob.cat2].n:""}${ob.proj?" · 🎬 "+esc(ob.proj):""}</div></div>
       <div class="bdur">${durStr(nowMin()-ob.s)}</div>
       <button class="btn" id="stopBtn" style="padding:8px 10px">⏹</button>
     </div>`;
@@ -586,7 +615,7 @@ function renderDay(){
         const e=b.e===null?1439:b.e;
         h+=`<div class="blk editable" style="border-left-color:${c.c}" data-id="${b.id}">
           <div class="bt"><div class="btime">${hhmm(b.s)}–${hhmm(e)}</div>
-          <div class="btxt">${c.e} ${esc(b.txt)}</div><div class="bcat">${c.n}${b.proj?" · 🎬 "+esc(b.proj):""}</div></div>
+          <div class="btxt">${c.e} ${esc(b.txt)}</div><div class="bcat">${c.n}${b.cat2?" + "+CATS[b.cat2].e+" "+CATS[b.cat2].n:""}${b.proj?" · 🎬 "+esc(b.proj):""}</div></div>
           <div class="bdur">${durStr(e-b.s)}</div>
         </div>`;
       }
@@ -610,13 +639,13 @@ function renderDay(){
   document.querySelectorAll(".gap").forEach(g=>{
     const s=+g.dataset.gs, e=+g.dataset.ge;
     g.querySelectorAll(".gapcat").forEach(btn=>btn.onclick=()=>{ fillGap(s,e,CATS[btn.dataset.cat].n,btn.dataset.cat); });
-    g.querySelector(".gapok").onclick=()=>{ const v=g.querySelector(".gaptxt").value.trim(); if(v){ const c=catOf(v); fillGap(s,e,v,c); } };
+    g.querySelector(".gapok").onclick=()=>{ const v=g.querySelector(".gaptxt").value.trim(); if(v){ const cs=catsOf(v); fillGap(s,e,v,cs[0],cs[1]); } };
     g.querySelector(".gaptxt").addEventListener("keydown",ev=>{ if(ev.key==="Enter") g.querySelector(".gapok").click(); });
   });
   const asb=$("#aiSumBtn"); if(asb) asb.onclick=async()=>{ asb.textContent="⏳…"; try{ const s=await aiSummary(CUR); getDay(CUR).summary=s; save(); render(); }catch(e){ asb.textContent="Błąd API"; } };
   const psb=$("#plainSumBtn"); if(psb) psb.onclick=()=>{ getDay(CUR).summary=""; save(); render(); };
 }
-function fillGap(s,e,txt,cat){ addBlock(getDay(CUR), s, e, txt, cat); save(); render(); }
+function fillGap(s,e,txt,cat,cat2){ addBlock(getDay(CUR), s, e, txt, cat, null, cat2); save(); render(); }
 function allProjects(){
   const set=new Set();
   for(const k in DB.days) for(const b of DB.days[k].blocks) if(b.proj) set.add(b.proj);
@@ -633,9 +662,17 @@ async function onAdd(){
   const inp=$("#dictInput"); const text=inp.value.trim();
   if(!text) return;
   const btn=$("#addBtn"); btn.textContent="⏳…"; btn.disabled=true;
+  const mode = SET.apiKey ? (SET.aiMode||"always") : "off";
   let events=null;
-  if(SET.apiKey){ try{ events=await aiParse(text, CUR); }catch(e){ events=null; } }
-  if(!events || !events.length) events=parseLocal(text, CUR);
+  if(mode==="always"){ try{ events=await aiParse(text, CUR); }catch(e){ events=null; } }
+  if(!events || !events.length){
+    const loc = parseLocal(text, CUR);
+    // tryb oszczędny: AI tylko gdy lokalny parser czegoś nie zrozumiał
+    if(mode==="smart" && (!loc.length || loc.some(e=>e.cat==="inne"))){
+      try{ events=await aiParse(text, CUR); }catch(e){ events=null; }
+    }
+    if(!events || !events.length) events=loc;
+  }
   if(!events.length){ btn.textContent="Nie zrozumiałem 🤔 spróbuj z godzinami"; btn.disabled=false; setTimeout(()=>{btn.textContent="➕ Dodaj do dnia";},2500); return; }
   applyEvents(CUR, events);
   inp.value="";
@@ -653,6 +690,8 @@ function openEdit(id){
   $("#emE").value=hhmm(b.e===null?nowMin():b.e);
   $("#emCats").innerHTML=Object.entries(CATS).map(([k,c])=>`<button class="catchip${k===b.cat?" sel":""}" data-cat="${k}">${c.e} ${c.n}</button>`).join("");
   $("#emCats").querySelectorAll(".catchip").forEach(el=>el.onclick=()=>{ $("#emCats").querySelectorAll(".catchip").forEach(x=>x.classList.remove("sel")); el.classList.add("sel"); });
+  $("#emCats2").innerHTML=`<button class="catchip${!b.cat2?" sel":""}" data-cat="">— brak</button>`+Object.entries(CATS).map(([k,c])=>`<button class="catchip${k===b.cat2?" sel":""}" data-cat="${k}">${c.e} ${c.n}</button>`).join("");
+  $("#emCats2").querySelectorAll(".catchip").forEach(el=>el.onclick=()=>{ $("#emCats2").querySelectorAll(".catchip").forEach(x=>x.classList.remove("sel")); el.classList.add("sel"); });
   $("#editModal").classList.add("open");
 }
 $("#emCancel").onclick=()=>$("#editModal").classList.remove("open");
@@ -663,6 +702,8 @@ $("#emSave").onclick=()=>{
   b.txt=$("#emTxt").value.trim()||b.txt;
   const pv2=$("#emProj").value.trim(); if(pv2) b.proj=pv2; else delete b.proj;
   const sel=$("#emCats").querySelector(".sel"); if(sel) b.cat=sel.dataset.cat;
+  const sel2=$("#emCats2").querySelector(".sel");
+  if(sel2 && sel2.dataset.cat && sel2.dataset.cat!==b.cat) b.cat2=sel2.dataset.cat; else delete b.cat2;
   const pv=v=>{const p=v.split(":");return +p[0]*60+ +p[1];};
   if($("#emS").value) b.s=pv($("#emS").value);
   if($("#emE").value) b.e=pv($("#emE").value);
@@ -788,24 +829,44 @@ function lineChart(keys){
 }
 
 /* ---- Dziennik ---- */
+function jChips(p){
+  return [p.mood!=null?"😊 "+p.mood:null,p.energia!=null?"⚡ "+p.energia:null,p.stres!=null?"😰 "+p.stres:null,p.sen!=null?"😴 "+p.sen+" h":null,p.sport?"🏃 sport":null].filter(Boolean);
+}
+function jBody(p){
+  return p.pretty || (p.entries||[]).map(e=>(e.t!=null? hhmm(e.t)+" — " : "")+e.txt).join("\n");
+}
+async function aiJournalPretty(k){
+  const j=getDay(k).journal;
+  const lines=(j.entries||[]).map(e=>(e.t!=null?hhmm(e.t)+" — ":"")+e.txt).join("\n");
+  const sys="Z surowych, dyktowanych w ciągu dnia notatek zredaguj jeden ładny wpis do dziennika po polsku, w 1. osobie, zachowując wszystkie fakty, liczby i chronologię. Płynny tekst, 1–2 akapity, bez nagłówków i list. Popraw literówki i potok mowy, ale nie dodawaj niczego od siebie.";
+  return await callAI(sys, lines, 600);
+}
 function renderJournal(){
   const day=DB.days[CUR]; const j=(day&&day.journal)||{};
+  const entries=j.entries||[];
   let h=`<div class="card">
-    <textarea id="jTxt" placeholder="Opowiedz o swoim dniu… np: „Dobry dzień, dużo zmontowałem. Samopoczucie 7, spałem 6 godzin, był sport — deskorolka. Stres 3.”">${esc(j.txt||"")}</textarea>
+    <textarea id="jTxt" placeholder="Dodaj wpis — teraz, w trakcie dnia… np: „Właśnie wróciłem ze ścianki, świetny trening. Samopoczucie 8, stres 2.”"></textarea>
+    <div class="btnrow"><button class="btn primary" id="jSave" style="flex:1">➕ Dodaj wpis</button></div>
     <div class="metric"><label>😊 Samopoczucie</label><input type="range" min="1" max="10" id="jMood" value="${j.mood??5}"><div class="mv" id="jMoodV">${j.mood??"–"}</div></div>
     <div class="metric"><label>⚡ Energia</label><input type="range" min="1" max="10" id="jEn" value="${j.energia??5}"><div class="mv" id="jEnV">${j.energia??"–"}</div></div>
     <div class="metric"><label>😰 Stres</label><input type="range" min="1" max="10" id="jStr" value="${j.stres??5}"><div class="mv" id="jStrV">${j.stres??"–"}</div></div>
     <div class="metric"><label>😴 Sen (h)</label><input type="number" min="0" max="16" step="0.5" id="jSen" value="${j.sen??""}" style="width:80px"><label style="width:auto"><input type="checkbox" id="jSport" ${j.sport?"checked":""}> 🏃 sport</label></div>
-    <div class="btnrow"><button class="btn primary" id="jSave" style="flex:1">💾 Zapisz wpis</button></div>
-    <div class="hint">Możesz podyktować wszystko w tekście — suwaki ustawią się same („samopoczucie 7”, „spałem 6 godzin”, „stres 3”, „sport”).</div>
+    <div class="hint">Dodawaj wpisy przez cały dzień — każdy dostaje godzinę. Metryki („samopoczucie 7”, „spałem 6 godzin”, „stres 3”, „sport”) wyciągają się same z tekstu.</div>
   </div>`;
-  // historia
-  const past=Object.keys(DB.days).filter(k=>DB.days[k].journal&&DB.days[k].journal.txt).sort().reverse().slice(0,30);
+  // wpisy z bieżącego dnia
+  if(entries.length || j.pretty){
+    h+=`<h2>${dayLabel(CUR)}</h2><div class="card">`;
+    if(j.pretty) h+=`<div class="summary" style="margin-bottom:12px">✨ ${esc(j.pretty)}</div>`;
+    h+=entries.map((e,i)=>`<div class="jentry"><div class="jd">${e.t!=null?hhmm(e.t):"—"}<button class="jdel" data-i="${i}" style="float:right;background:none;border:0;color:var(--mut);font-size:14px;padding:0 4px">✕</button></div><div class="jtxt">${esc(e.txt)}</div></div>`).join("");
+    if(SET.apiKey && entries.length) h+=`<div class="btnrow"><button class="btn" id="jPrettyBtn">${j.pretty?"✨ Zredaguj ponownie":"✨ Zredaguj wpis dnia"}</button></div>`;
+    h+=`</div>`;
+  }
+  // historia — ostatni miesiąc
+  const past=Object.keys(DB.days).filter(k=>{ const p=DB.days[k].journal; return k!==CUR && p && ((p.entries&&p.entries.length)||p.pretty); }).sort().reverse().slice(0,31);
   if(past.length){
-    h+=`<h2>Poprzednie wpisy</h2><div class="card">`+past.map(k=>{
+    h+=`<h2>Poprzednie dni</h2><div class="card">`+past.map(k=>{
       const p=DB.days[k].journal;
-      const chips=[p.mood!=null?"😊 "+p.mood:null,p.energia!=null?"⚡ "+p.energia:null,p.stres!=null?"😰 "+p.stres:null,p.sen!=null?"😴 "+p.sen+" h":null,p.sport?"🏃 sport":null].filter(Boolean);
-      return `<div class="jentry"><div class="jd">${dayLabel(k)} · ${k}</div><div class="jtxt">${esc(p.txt)}</div><div class="jchips">${chips.map(c=>`<span class="jchip">${c}</span>`).join("")}</div></div>`;
+      return `<div class="jentry"><div class="jd">${dayLabel(k)} · ${k}</div><div class="jtxt">${esc(jBody(p))}</div><div class="jchips">${jChips(p).map(c=>`<span class="jchip">${c}</span>`).join("")}</div></div>`;
     }).join("")+`</div>`;
   }
   $("#view").innerHTML=h;
@@ -823,15 +884,29 @@ function renderJournal(){
   $("#jSave").onclick=()=>{
     const txt=$("#jTxt").value.trim();
     const day=getDay(CUR);
-    day.journal={
-      txt,
-      mood: touched.mood? +$("#jMood").value : (parseJournal(txt).mood ?? null),
-      energia: touched.energia? +$("#jEn").value : (parseJournal(txt).energia ?? null),
-      stres: touched.stres? +$("#jStr").value : (parseJournal(txt).stres ?? null),
-      sen: $("#jSen").value!==""? +$("#jSen").value : null,
-      sport: $("#jSport").checked
-    };
+    if(!day.journal) day.journal={entries:[]};
+    const jj=day.journal; jj.entries=jj.entries||[];
+    if(txt){
+      jj.entries.push({t: CUR===todayKey()? nowMin() : null, txt});
+      jj.pretty=""; // nowy wpis unieważnia zredagowaną wersję
+    }
+    const p=parseJournal(txt);
+    jj.mood   = touched.mood?    +$("#jMood").value : (p.mood    ?? jj.mood    ?? null);
+    jj.energia= touched.energia? +$("#jEn").value   : (p.energia ?? jj.energia ?? null);
+    jj.stres  = touched.stres?   +$("#jStr").value  : (p.stres   ?? jj.stres   ?? null);
+    jj.sen    = $("#jSen").value!==""? +$("#jSen").value : (p.sen ?? jj.sen ?? null);
+    jj.sport  = $("#jSport").checked || !!p.sport || !!jj.sport;
     save(); render();
+  };
+  document.querySelectorAll(".jdel").forEach(btn=>btn.onclick=()=>{
+    const jj=getDay(CUR).journal; if(!jj) return;
+    jj.entries.splice(+btn.dataset.i,1); jj.pretty="";
+    save(); render();
+  });
+  const jpb=$("#jPrettyBtn"); if(jpb) jpb.onclick=async()=>{
+    jpb.textContent="⏳ Redaguję…"; jpb.disabled=true;
+    try{ getDay(CUR).journal.pretty=await aiJournalPretty(CUR); save(); render(); }
+    catch(e){ jpb.textContent="Błąd API — spróbuj ponownie"; jpb.disabled=false; }
   };
 }
 
@@ -845,6 +920,14 @@ function renderMore(){
       <button class="btn" id="testKeyBtn">Testuj połączenie</button>
     </div>
     <div id="apiStatus"></div>
+    <div class="frow" style="margin-top:14px"><label style="width:auto;color:var(--mut);font-size:14px">Ile wysyłać do AI:</label>
+      <select id="aiModeSel" style="flex:1">
+        <option value="always">Wszystko — najlepsze rozumienie</option>
+        <option value="smart">Oszczędnie — tylko gdy trzeba</option>
+        <option value="off">Nic — tylko lokalnie (offline)</option>
+      </select>
+    </div>
+    <div class="hint" id="usageInfo"></div>
   </div>
   <div class="card">
     <div class="hint" style="margin:0 0 8px">Dane są tylko na tym telefonie. Rób kopie!</div>
@@ -869,6 +952,13 @@ function renderMore(){
   </div>
   <div class="hint" style="text-align:center">Dziennik v1 · dane w localStorage</div>`;
   $("#view").innerHTML=h;
+  $("#aiModeSel").value = SET.aiMode==="off"||SET.aiMode==="smart" ? SET.aiMode : "always";
+  $("#aiModeSel").onchange=()=>{ SET.aiMode=$("#aiModeSel").value; saveSet(); };
+  const u=SET.usage;
+  const fm=v=>"$"+v.toFixed(v<0.1?4:2);
+  $("#usageInfo").innerHTML = u && u.allReqs
+    ? `💸 Wydane przez aplikację — ten miesiąc: <b>${fm(usdCost(u.in,u.out))}</b> (${u.reqs} zapytań) · łącznie: <b>${fm(usdCost(u.allIn,u.allOut))}</b> (${u.allReqs}).<br>Typowe zapytanie kosztuje ok. $0,001–0,003, więc $5 kredytu starcza na tysiące wpisów. Anthropic nie udostępnia stanu konta przez API — saldo sprawdzisz na console.anthropic.com (Billing).`
+    : `💸 Licznik kosztów: aplikacja zlicza każde zapytanie do AI i pokaże tu wydatki. Typowe zapytanie to ok. $0,001–0,003 ($5 starcza na tysiące wpisów). Saldo konta sprawdzisz na console.anthropic.com (Billing) — API nie udostępnia go aplikacjom.`;
   $("#saveKeyBtn").onclick=()=>{ SET.apiKey=$("#apiKeyInput").value.trim(); saveSet(); $("#apiStatus").textContent="Zapisano ✔"; $("#apiStatus").style.color="var(--grn)"; };
   $("#testKeyBtn").onclick=async()=>{
     SET.apiKey=$("#apiKeyInput").value.trim(); saveSet();
@@ -918,6 +1008,12 @@ function checkAutoBackup(){
 }
 
 /* ============ START ============ */
+// migracja: stary dziennik {txt} → lista wpisów {entries}
+for(const k in DB.days){
+  const jj=DB.days[k].journal;
+  if(jj && jj.entries===undefined){ jj.entries = jj.txt? [{t:null, txt:jj.txt}] : []; delete jj.txt; }
+}
+save();
 closeStaleOpen();
 checkAutoBackup();
 render();
