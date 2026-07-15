@@ -1,4 +1,4 @@
-const CACHE = "dziennik-v3";
+const CACHE = "dziennik-v4";
 const ASSETS = ["./", "./index.html", "./manifest.json", "./icon.svg"];
 
 self.addEventListener("install", e => {

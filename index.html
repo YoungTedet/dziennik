@@ -196,6 +196,7 @@ let CUR = todayKey();          // data widoczna na Dzień/Dziennik
 let RANGE = "day";             // zakres w Wykresach: day/week/month
 let CURC = todayKey();         // data w Wykresach
 let editId = null;
+let LASTREPLY = null; // {key, txt} — potwierdzenie ostatniego dodania
 
 function loadLS(k, def){ try{ return Object.assign(def, JSON.parse(localStorage.getItem(k)||"{}")); }catch(e){ return def; } }
 function save(){ localStorage.setItem("dziennik_db", JSON.stringify(DB)); }
@@ -439,7 +440,8 @@ async function aiParse(text, dateKey){
   const isToday = dateKey===todayKey();
   const catList = Object.keys(CATS).join(", ");
   const projs = allProjects();
-  const sys = `Analizujesz dyktowany po polsku opis dnia i zamieniasz go na zdarzenia z czasem. Zwróć TYLKO JSON: {"events":[{"t":"HH:MM","txt":"krótki opis czynności","cat":"kategoria","cat2":"druga kategoria (opcjonalna)","fill":"forward|none","proj":"nazwa projektu (opcjonalna)"}]}.
+  const sys = `Analizujesz dyktowany po polsku opis dnia i zamieniasz go na zdarzenia z czasem. Zwróć TYLKO JSON: {"events":[{"t":"HH:MM","txt":"krótki opis czynności","cat":"kategoria","cat2":"druga kategoria (opcjonalna)","fill":"forward|none","proj":"nazwa projektu (opcjonalna)"}],"reply":"krótkie potwierdzenie po polsku"}.
+reply: 1–2 zdania w stylu "OK, dodałem montaż (Praca) od 10:00 i utworzyłem nowy projekt eBOO." — wymień czynności, kategorie i koniecznie nowe projekty. Bez pytań, sam fakt.
 Kategorie: ${catList}. strata = scrollowanie/social media/bezczynność; odpoczynek = świadomy relaks (serial, książka, spacer); praca = praca zawodowa dla klientów (montaż, plany zdjęciowe, maile); tworczosc = WŁASNE filmy i projekty artystyczne robione dla siebie ("montuję swój film", "mój film o Norwegii") — to wolny czas, NIE praca.
 cat2: dodaj gdy czynność należy naturalnie do dwóch kategorii naraz, np. "dojazd rowerem" = cat transport + cat2 sport, "gotowałem słuchając podcastu" = jedzenie + odpoczynek. Zwykle cat2 pomijaj.
 proj: gdy pada nazwa filmu/projektu/klienta (przy pracy lub twórczości), podaj KRÓTKĄ nazwę, np. "montuję swój film o Norwegii" → cat "tworczosc", proj "Norwegia". Używaj istniejących nazw projektów jeśli pasują: [${projs.map(p=>'"'+p+'"').join(", ")}]. Ta sama nazwa = czas sumuje się do tego samego projektu.
@@ -448,7 +450,8 @@ Godziny bez rano/wieczorem interpretuj rozsądnie względem kontekstu. Aktualny 
   const txt = await callAI(sys, text, 800);
   const jm = txt.match(/\{[\s\S]*\}/);
   if(!jm) throw new Error("brak JSON");
-  const evs = (JSON.parse(jm[0]).events||[]).map(ev=>{
+  const parsed = JSON.parse(jm[0]);
+  const evs = (parsed.events||[]).map(ev=>{
     const p = String(ev.t||"").match(/(\d{1,2}):(\d{2})/);
     if(!p) return null;
     const cat = CATS[ev.cat]? ev.cat : catOf(ev.txt||"");
@@ -457,7 +460,7 @@ Godziny bez rano/wieczorem interpretuj rozsądnie względem kontekstu. Aktualny 
     if(ev.cat2 && CATS[ev.cat2] && ev.cat2!==cat) out.cat2=ev.cat2;
     return out;
   }).filter(Boolean).sort((a,b)=>a.t-b.t);
-  return evs;
+  return {events: evs, reply: String(parsed.reply||"").slice(0,300)};
 }
 async function aiSummary(dateKey){
   const day = getDay(dateKey);
@@ -572,6 +575,13 @@ function renderDay(){
     <div class="hint">Dyktuj przez klawiaturę (mikrofon / Wispr Flow). Podawaj godziny — aplikacja sama potnie dzień na bloki i przypisze kategorie.${SET.apiKey?" 🤖 AI włączone.":""}</div>
   </div>`;
 
+  if(LASTREPLY && LASTREPLY.key===CUR){
+    h+=`<div class="card" style="border-left:4px solid var(--grn);display:flex;gap:10px;align-items:flex-start">
+      <div class="summary" style="flex:1;font-size:14px">🤖 ${esc(LASTREPLY.txt)}</div>
+      <button class="btn" id="replyDismiss" style="padding:4px 10px;flex:none">✕</button>
+    </div>`;
+  }
+
   if(isToday){
     h+=`<div class="card"><div class="hint" style="margin:0 0 8px">⚡ Szybki start — tapnij, co właśnie zaczynasz:</div>
       <div class="catgrid">${["praca","tworczosc","jedzenie","higiena","porzadki","sport","odpoczynek","strata","transport"].map(k=>`<button class="catchip qstart" data-cat="${k}">${CATS[k].e} ${CATS[k].n}</button>`).join("")}</div>
@@ -632,6 +642,7 @@ function renderDay(){
   $("#view").innerHTML=h;
 
   $("#addBtn").onclick=onAdd;
+  const rd=$("#replyDismiss"); if(rd) rd.onclick=()=>{ LASTREPLY=null; render(); };
   document.querySelectorAll(".qstart").forEach(b=>b.onclick=()=>quickStart(b.dataset.cat));
   const sb=$("#stopBtn"); if(sb) sb.onclick=()=>{ const o=openBlock(getDay(CUR)); if(o){o.e=nowMin(); save(); render();} };
   document.querySelectorAll(".blk.editable").forEach(el=>el.onclick=()=>openEdit(el.dataset.id));
@@ -646,6 +657,15 @@ function renderDay(){
   const psb=$("#plainSumBtn"); if(psb) psb.onclick=()=>{ getDay(CUR).summary=""; save(); render(); };
 }
 function fillGap(s,e,txt,cat,cat2){ addBlock(getDay(CUR), s, e, txt, cat, null, cat2); save(); render(); }
+function buildReply(events, newProjs){
+  const items = events.map(e=>{
+    const c=CATS[e.cat]||CATS.inne;
+    return `${hhmm(e.t)}${e.end!=null?"–"+hhmm(e.end):""} ${c.e} ${e.txt}${e.cat2?" ("+c.n+" + "+CATS[e.cat2].n+")":""}${e.proj?" · 🎬 "+e.proj:""}`;
+  });
+  let s = "OK, dodałem: " + items.join("; ") + ".";
+  if(newProjs.length) s += " Utworzyłem nowy projekt: " + newProjs.join(", ") + ".";
+  return s;
+}
 function allProjects(){
   const set=new Set();
   for(const k in DB.days) for(const b of DB.days[k].blocks) if(b.proj) set.add(b.proj);
@@ -663,18 +683,20 @@ async function onAdd(){
   if(!text) return;
   const btn=$("#addBtn"); btn.textContent="⏳…"; btn.disabled=true;
   const mode = SET.apiKey ? (SET.aiMode||"always") : "off";
-  let events=null;
-  if(mode==="always"){ try{ events=await aiParse(text, CUR); }catch(e){ events=null; } }
-  if(!events || !events.length){
+  let events=null, reply="";
+  const tryAI=async()=>{ try{ const r=await aiParse(text, CUR); if(r.events.length){ events=r.events; reply=r.reply; } }catch(e){} };
+  if(mode==="always") await tryAI();
+  if(!events){
     const loc = parseLocal(text, CUR);
     // tryb oszczędny: AI tylko gdy lokalny parser czegoś nie zrozumiał
-    if(mode==="smart" && (!loc.length || loc.some(e=>e.cat==="inne"))){
-      try{ events=await aiParse(text, CUR); }catch(e){ events=null; }
-    }
-    if(!events || !events.length) events=loc;
+    if(mode==="smart" && (!loc.length || loc.some(e=>e.cat==="inne"))) await tryAI();
+    if(!events) events=loc;
   }
   if(!events.length){ btn.textContent="Nie zrozumiałem 🤔 spróbuj z godzinami"; btn.disabled=false; setTimeout(()=>{btn.textContent="➕ Dodaj do dnia";},2500); return; }
+  const beforeProjs = allProjects();
   applyEvents(CUR, events);
+  const newProjs = allProjects().filter(p=>!beforeProjs.includes(p));
+  LASTREPLY = {key:CUR, txt: reply || buildReply(events, newProjs)};
   inp.value="";
   render();
 }
