@@ -413,23 +413,31 @@ function closeStaleOpen(){
 }
 
 /* ============ AI (Claude API) ============ */
-// Ceny Claude Haiku 4.5: $1 / mln tokenów wejścia, $5 / mln wyjścia
-function usdCost(inTok, outTok){ return inTok*1e-6*1.0 + outTok*1e-6*5.0; }
+// Modele i ceny ($ za mln tokenów wejścia / wyjścia)
+const AI_MODELS = {
+  sonnet: {id:"claude-sonnet-4-6",           inP:3, outP:15},
+  haiku:  {id:"claude-haiku-4-5-20251001",   inP:1, outP:5}
+};
+function aiModel(){ return AI_MODELS[SET.aiModel] || AI_MODELS.sonnet; }
+function usdCost(inTok, outTok){ return inTok*1e-6*1.0 + outTok*1e-6*5.0; } // stare dane (haiku)
 function trackUsage(u){
   if(!u) return;
   const mk = todayKey().slice(0,7);
   let s = SET.usage;
-  if(!s) s = SET.usage = {month:mk, in:0, out:0, reqs:0, allIn:0, allOut:0, allReqs:0};
-  if(s.month!==mk){ s.month=mk; s.in=0; s.out=0; s.reqs=0; }
-  s.in += u.input_tokens||0; s.out += u.output_tokens||0; s.reqs++;
-  s.allIn += u.input_tokens||0; s.allOut += u.output_tokens||0; s.allReqs++;
+  if(!s) s = SET.usage = {month:mk, in:0, out:0, reqs:0, allIn:0, allOut:0, allReqs:0, cost:0, allCost:0};
+  if(s.cost===undefined){ s.cost=usdCost(s.in,s.out); s.allCost=usdCost(s.allIn,s.allOut); }
+  if(s.month!==mk){ s.month=mk; s.in=0; s.out=0; s.reqs=0; s.cost=0; }
+  const m=aiModel();
+  const c=(u.input_tokens||0)*1e-6*m.inP + (u.output_tokens||0)*1e-6*m.outP;
+  s.in += u.input_tokens||0; s.out += u.output_tokens||0; s.reqs++; s.cost += c;
+  s.allIn += u.input_tokens||0; s.allOut += u.output_tokens||0; s.allReqs++; s.allCost += c;
   saveSet();
 }
 async function callAI(system, user, maxTok){
   const res = await fetch("https://api.anthropic.com/v1/messages",{
     method:"POST",
     headers:{"content-type":"application/json","x-api-key":SET.apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-    body:JSON.stringify({model:"claude-haiku-4-5-20251001", max_tokens:maxTok||600, system, messages:[{role:"user",content:user}]})
+    body:JSON.stringify({model:aiModel().id, max_tokens:maxTok||600, system, messages:[{role:"user",content:user}]})
   });
   if(!res.ok) throw new Error("API "+res.status);
   const data = await res.json();
@@ -440,13 +448,25 @@ async function aiParse(text, dateKey){
   const isToday = dateKey===todayKey();
   const catList = Object.keys(CATS).join(", ");
   const projs = allProjects();
-  const sys = `Analizujesz dyktowany po polsku opis dnia i zamieniasz go na zdarzenia z czasem. Zwróć TYLKO JSON: {"events":[{"t":"HH:MM","txt":"krótki opis czynności","cat":"kategoria","cat2":"druga kategoria (opcjonalna)","fill":"forward|none","proj":"nazwa projektu (opcjonalna)"}],"reply":"krótkie potwierdzenie po polsku"}.
-reply: 1–2 zdania w stylu "OK, dodałem montaż (Praca) od 10:00 i utworzyłem nowy projekt eBOO." — wymień czynności, kategorie i koniecznie nowe projekty. Bez pytań, sam fakt.
-Kategorie: ${catList}. strata = scrollowanie/social media/bezczynność; odpoczynek = świadomy relaks (serial, książka, spacer); praca = praca zawodowa dla klientów (montaż, plany zdjęciowe, maile); tworczosc = WŁASNE filmy i projekty artystyczne robione dla siebie ("montuję swój film", "mój film o Norwegii") — to wolny czas, NIE praca.
-cat2: dodaj gdy czynność należy naturalnie do dwóch kategorii naraz, np. "dojazd rowerem" = cat transport + cat2 sport, "gotowałem słuchając podcastu" = jedzenie + odpoczynek. Zwykle cat2 pomijaj.
-proj: gdy pada nazwa filmu/projektu/klienta (przy pracy lub twórczości), podaj KRÓTKĄ nazwę, np. "montuję swój film o Norwegii" → cat "tworczosc", proj "Norwegia". Używaj istniejących nazw projektów jeśli pasują: [${projs.map(p=>'"'+p+'"').join(", ")}]. Ta sama nazwa = czas sumuje się do tego samego projektu.
-fill="forward" gdy czynność trwa od tego momentu do następnego zdarzenia (np. "zacząłem pracować", "umyłem się"); fill="none" gdy to tylko punkt w czasie kończący coś (np. "wstałem", "zjadłem", "wróciłem") — czas przed następnym zdarzeniem pozostaje wtedy nieznany.
-Godziny bez rano/wieczorem interpretuj rozsądnie względem kontekstu. Aktualny czas: ${isToday? hhmm(nowMin()) : "koniec dnia"}. "teraz/właśnie" = aktualny czas. Zdarzenia posortuj chronologicznie.`;
+  const nowStr = isToday? hhmm(nowMin()) : "koniec dnia";
+  const sys = `Jesteś parserem dziennika czasu. Zamieniasz dyktowany po polsku tekst na zdarzenia z czasem. Zwróć TYLKO JSON:
+{"events":[{"t":"HH:MM","txt":"krótki opis czynności","cat":"kategoria","cat2":"druga kategoria (opcjonalna)","fill":"forward|none","proj":"nazwa projektu (opcjonalna)"}],"reply":"potwierdzenie po polsku"}
+
+ZASADY:
+1. Zdania-polecenia ("stwórz projekt X", "dodaj to do projektu X", "to jest projekt X", "nazwij to X") to INSTRUKCJE dotyczące wpisu — NIGDY nie rób z nich osobnego zdarzenia. Zastosuj je: ustaw proj właściwego zdarzenia.
+2. NIE wymyślaj godzin. "teraz/właśnie/zaczynam" = aktualny czas (${nowStr}). Gdy zdanie nie ma godziny — też użyj aktualnego czasu.
+3. fill="forward" gdy czynność trwa od t do następnego zdarzenia (ostatnie zdarzenie forward = trwa nadal, licznik działa); fill="none" dla punktowych ("wstałem", "zjadłem", "wróciłem") — czas przed następnym zdarzeniem zostaje do dopytania.
+4. Kategorie: ${catList}. strata = scrollowanie/social media/bezczynność; odpoczynek = świadomy relaks (serial, książka, spacer); praca = praca zawodowa dla klientów (montaż, plany zdjęciowe, maile); tworczosc = WŁASNE filmy i projekty artystyczne ("montuję swój film") — wolny czas, NIE praca.
+5. cat2: tylko gdy czynność naturalnie należy do dwóch kategorii ("dojazd rowerem" = transport + sport). Zwykle pomijaj.
+6. proj: gdy pada nazwa projektu/filmu/klienta — KRÓTKA nazwa. Istniejące projekty (używaj ich, jeśli pasują — ta sama nazwa sumuje czas): [${projs.map(p=>'"'+p+'"').join(", ")}].
+7. reply: 1–2 zdania — CO dodałeś: czynności z godzinami, kategorie, projekty (zwłaszcza nowe). NIGDY samo "OK".
+8. Zdarzenia posortuj chronologicznie. Godziny bez rano/wieczorem interpretuj rozsądnie względem kontekstu.
+
+PRZYKŁAD (aktualny czas 12:14):
+Wejście: "Teraz pracuję nad pierwszym filmem produktowym dla eBoo. Stwórz projekt eBoo pierwszy film produktowy. Będę go montował."
+Wyjście: {"events":[{"t":"12:14","txt":"montaż pierwszego filmu produktowego dla eBoo","cat":"praca","fill":"forward","proj":"eBoo — pierwszy film produktowy"}],"reply":"OK, od 12:14 montujesz pierwszy film produktowy dla eBoo (Praca) — utworzyłem projekt „eBoo — pierwszy film produktowy” i liczę czas."}
+
+Aktualny czas: ${nowStr}.`;
   const txt = await callAI(sys, text, 800);
   const jm = txt.match(/\{[\s\S]*\}/);
   if(!jm) throw new Error("brak JSON");
@@ -949,6 +969,12 @@ function renderMore(){
         <option value="off">Nic — tylko lokalnie (offline)</option>
       </select>
     </div>
+    <div class="frow"><label style="width:auto;color:var(--mut);font-size:14px">Model AI:</label>
+      <select id="aiModelSel" style="flex:1">
+        <option value="sonnet">Mądry (Sonnet) — lepiej rozumie, ~0,5–2 gr/wpis</option>
+        <option value="haiku">Ekonomiczny (Haiku) — ~5× tańszy</option>
+      </select>
+    </div>
     <div class="hint" id="usageInfo"></div>
   </div>
   <div class="card">
@@ -976,11 +1002,13 @@ function renderMore(){
   $("#view").innerHTML=h;
   $("#aiModeSel").value = SET.aiMode==="off"||SET.aiMode==="smart" ? SET.aiMode : "always";
   $("#aiModeSel").onchange=()=>{ SET.aiMode=$("#aiModeSel").value; saveSet(); };
+  $("#aiModelSel").value = SET.aiModel==="haiku" ? "haiku" : "sonnet";
+  $("#aiModelSel").onchange=()=>{ SET.aiModel=$("#aiModelSel").value; saveSet(); };
   const u=SET.usage;
   const fm=v=>"$"+v.toFixed(v<0.1?4:2);
   $("#usageInfo").innerHTML = u && u.allReqs
-    ? `💸 Wydane przez aplikację — ten miesiąc: <b>${fm(usdCost(u.in,u.out))}</b> (${u.reqs} zapytań) · łącznie: <b>${fm(usdCost(u.allIn,u.allOut))}</b> (${u.allReqs}).<br>Typowe zapytanie kosztuje ok. $0,001–0,003, więc $5 kredytu starcza na tysiące wpisów. Anthropic nie udostępnia stanu konta przez API — saldo sprawdzisz na console.anthropic.com (Billing).`
-    : `💸 Licznik kosztów: aplikacja zlicza każde zapytanie do AI i pokaże tu wydatki. Typowe zapytanie to ok. $0,001–0,003 ($5 starcza na tysiące wpisów). Saldo konta sprawdzisz na console.anthropic.com (Billing) — API nie udostępnia go aplikacjom.`;
+    ? `💸 Wydane przez aplikację — ten miesiąc: <b>${fm(u.cost ?? usdCost(u.in,u.out))}</b> (${u.reqs} zapytań) · łącznie: <b>${fm(u.allCost ?? usdCost(u.allIn,u.allOut))}</b> (${u.allReqs}).<br>Typowy wpis to ułamek grosza, więc $5 kredytu starcza na setki–tysiące wpisów. Anthropic nie udostępnia stanu konta przez API — saldo sprawdzisz na console.anthropic.com (Billing).`
+    : `💸 Licznik kosztów: aplikacja zlicza każde zapytanie do AI i pokaże tu wydatki. Typowy wpis to ułamek grosza ($5 starcza na setki–tysiące wpisów). Saldo konta sprawdzisz na console.anthropic.com (Billing) — API nie udostępnia go aplikacjom.`;
   $("#saveKeyBtn").onclick=()=>{ SET.apiKey=$("#apiKeyInput").value.trim(); saveSet(); $("#apiStatus").textContent="Zapisano ✔"; $("#apiStatus").style.color="var(--grn)"; };
   $("#testKeyBtn").onclick=async()=>{
     SET.apiKey=$("#apiKeyInput").value.trim(); saveSet();
