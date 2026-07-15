@@ -122,6 +122,7 @@ svg text{font-family:inherit}
   <div class="sheet">
     <h3>Edytuj blok</h3>
     <div class="frow"><label>Co?</label><input id="emTxt" style="flex:1"></div>
+    <div class="frow"><label>Projekt</label><input id="emProj" list="projList" placeholder="np. film dla klienta (opcjonalnie)" style="flex:1"><datalist id="projList"></datalist></div>
     <div class="frow"><label>Od</label><input type="time" id="emS"><label style="width:auto">Do</label><input type="time" id="emE"></div>
     <div style="margin:10px 0"><div class="hint" style="margin:0 0 6px">Kategoria:</div><div class="catgrid" id="emCats"></div></div>
     <div class="btnrow">
@@ -182,8 +183,10 @@ const PUNCTUAL = /wstał|obudził|budzik|skończył|wrócił|przyszed|dotarł|\b
 const DURATIVE = /zaczynam|zaczął|zaczęł|zabieram się|siadam|siadł|idę |lecę |będę|robię|pracuję|montuję|sprzątam|odpoczywam|wychodzę|kładę się/;
 const PRESENT = /zaczynam|zabieram|siadam|idę|lecę|robię|pracuję|montuję|sprzątam|odpoczywam|wychodzę|kładę|będę|\bjem\b|\bgram\b/;
 
-let DB = loadLS("dziennik_db", {days:{}});
-let SET = loadLS("dziennik_set", {apiKey:"", learned:{}});
+let DB = loadLS("dziennik_db", {days:{}, reports:{}});
+let SET = loadLS("dziennik_set", {apiKey:"", learned:{}, autoBackup:{freq:"week", last:0}});
+if(!DB.reports) DB.reports={};
+if(!SET.autoBackup) SET.autoBackup={freq:"week", last:0};
 let TAB = "day";
 let CUR = todayKey();          // data widoczna na Dzień/Dziennik
 let RANGE = "day";             // zakres w Wykresach: day/week/month
@@ -349,7 +352,7 @@ function parseLocal(text, dateKey){
 
 /* ============ ZDARZENIA → BLOKI ============ */
 function sortBlocks(day){ day.blocks.sort((a,b)=>a.s-b.s); }
-function addBlock(day, s, e, txt, cat){
+function addBlock(day, s, e, txt, cat, proj){
   // przytnij do wolnych miejsc (bez nakładania na istniejące bloki)
   const isToday_e = e; let segs=[[s, e===null? null : e]];
   for(const b of day.blocks){
@@ -366,7 +369,8 @@ function addBlock(day, s, e, txt, cat){
   for(const [x,y] of segs){
     const yy=y===null?null:y;
     if(yy!==null && yy-x<2) continue;
-    day.blocks.push({id:uid(), s:x, e:yy, txt, cat});
+    const nb={id:uid(), s:x, e:yy, txt, cat}; if(proj) nb.proj=proj;
+    day.blocks.push(nb);
   }
   sortBlocks(day);
 }
@@ -386,7 +390,7 @@ function applyEvents(dateKey, events){
     let end = ev.end!=null ? ev.end : (nx ? nx.t : null);
     if(end!==null && end<=ev.t) continue;
     if(end===null && dateKey!==todayKey()) end=Math.min(ev.t+30,1439); // nie zostawiaj otwartych bloków w przeszłości
-    addBlock(day, ev.t, end, ev.txt, ev.cat);
+    addBlock(day, ev.t, end, ev.txt, ev.cat, ev.proj);
   }
   save();
 }
@@ -411,7 +415,7 @@ async function callAI(system, user, maxTok){
 async function aiParse(text, dateKey){
   const isToday = dateKey===todayKey();
   const catList = Object.keys(CATS).join(", ");
-  const sys = `Analizujesz dyktowany po polsku opis dnia i zamieniasz go na zdarzenia z czasem. Zwróć TYLKO JSON: {"events":[{"t":"HH:MM","txt":"krótki opis czynności","cat":"kategoria","fill":"forward|none"}]}.
+  const sys = `Analizujesz dyktowany po polsku opis dnia i zamieniasz go na zdarzenia z czasem. Zwróć TYLKO JSON: {"events":[{"t":"HH:MM","txt":"krótki opis czynności","cat":"kategoria","fill":"forward|none","proj":"nazwa projektu (tylko jeśli pada nazwa filmu/projektu/klienta przy pracy)"}]}.
 Kategorie: ${catList}. strata = scrollowanie/social media/bezczynność; odpoczynek = świadomy relaks (serial, książka, spacer); praca = praca zawodowa/montaż filmów.
 fill="forward" gdy czynność trwa od tego momentu do następnego zdarzenia (np. "zacząłem pracować", "umyłem się"); fill="none" gdy to tylko punkt w czasie kończący coś (np. "wstałem", "zjadłem", "wróciłem") — czas przed następnym zdarzeniem pozostaje wtedy nieznany.
 Godziny bez rano/wieczorem interpretuj rozsądnie względem kontekstu. Aktualny czas: ${isToday? hhmm(nowMin()) : "koniec dnia"}. "teraz/właśnie" = aktualny czas. Zdarzenia posortuj chronologicznie.`;
@@ -422,7 +426,9 @@ Godziny bez rano/wieczorem interpretuj rozsądnie względem kontekstu. Aktualny 
     const p = String(ev.t||"").match(/(\d{1,2}):(\d{2})/);
     if(!p) return null;
     const cat = CATS[ev.cat]? ev.cat : catOf(ev.txt||"");
-    return {t:Math.min(parseInt(p[1])*60+parseInt(p[2]),1439), txt:String(ev.txt||"").slice(0,80), cat, fill: ev.fill==="none"?"none":"forward"};
+    const out={t:Math.min(parseInt(p[1])*60+parseInt(p[2]),1439), txt:String(ev.txt||"").slice(0,80), cat, fill: ev.fill==="none"?"none":"forward"};
+    if(ev.proj) out.proj=String(ev.proj).slice(0,40);
+    return out;
   }).filter(Boolean).sort((a,b)=>a.t-b.t);
   return evs;
 }
@@ -433,6 +439,19 @@ async function aiSummary(dateKey){
   const jt = j? `\nDziennik: ${j.txt||""} (samopoczucie ${j.mood??"-"}/10, sen ${j.sen??"-"} h, energia ${j.energia??"-"}/10, stres ${j.stres??"-"}/10${j.sport?", sport: tak":""})` : "";
   const sys = "Napisz krótkie (4-6 zdań), ciepłe ale szczere podsumowanie dnia po polsku, w 2. osobie. Zauważ co poszło dobrze, delikatnie wskaż stratę czasu jeśli była duża. Bez nagłówków, sam tekst.";
   return await callAI(sys, `Dzień ${dateKey}:\n${lines}${jt}`, 500);
+}
+
+async function aiWeekReport(keys){
+  const lines = keys.map(k=>{
+    const tot=dayTotals(k);
+    const cats=Object.entries(tot).map(([c,m])=>CATS[c].n+" "+durStr(m)).join(", ")||"brak danych";
+    const j=(DB.days[k]||{}).journal;
+    const jm=j?` | samopoczucie ${j.mood??"-"}/10, sen ${j.sen??"-"} h, stres ${j.stres??"-"}/10${j.sport?", sport":""}`:"";
+    const d=keyToDate(k);
+    return DOWS[d.getDay()]+" "+k+": "+cats+jm;
+  }).join("\n");
+  const sys="Jesteś życzliwym, konkretnym coachem. Na podstawie danych z tygodnia napisz po polsku raport (6–10 zdań): co szło dobrze, jakie widać wzorce (np. kiedy pojawia się strata czasu, jak sen wpływa na samopoczucie), i 1–2 konkretne sugestie na następny tydzień. Zwracaj się w 2. osobie, bez nagłówków, sam tekst.";
+  return await callAI(sys, lines, 700);
 }
 
 /* ============ PODSUMOWANIE (szablon) ============ */
@@ -524,12 +543,18 @@ function renderDay(){
     <div class="hint">Dyktuj przez klawiaturę (mikrofon / Wispr Flow). Podawaj godziny — aplikacja sama potnie dzień na bloki i przypisze kategorie.${SET.apiKey?" 🤖 AI włączone.":""}</div>
   </div>`;
 
+  if(isToday){
+    h+=`<div class="card"><div class="hint" style="margin:0 0 8px">⚡ Szybki start — tapnij, co właśnie zaczynasz:</div>
+      <div class="catgrid">${["praca","jedzenie","higiena","porzadki","sport","odpoczynek","strata","transport"].map(k=>`<button class="catchip qstart" data-cat="${k}">${CATS[k].e} ${CATS[k].n}</button>`).join("")}</div>
+    </div>`;
+  }
+
   const ob = day && openBlock(day);
   if(ob && isToday){
     const c=CATS[ob.cat];
     h+=`<div class="blk now" style="border-left-color:${c.c}" data-id="${ob.id}">
       <div class="bt"><div class="btime">TERAZ · od ${hhmm(ob.s)}</div>
-      <div class="btxt">${c.e} ${esc(ob.txt)}</div><div class="bcat">${c.n}</div></div>
+      <div class="btxt">${c.e} ${esc(ob.txt)}</div><div class="bcat">${c.n}${ob.proj?" · 🎬 "+esc(ob.proj):""}</div></div>
       <div class="bdur">${durStr(nowMin()-ob.s)}</div>
       <button class="btn" id="stopBtn" style="padding:8px 10px">⏹</button>
     </div>`;
@@ -561,7 +586,7 @@ function renderDay(){
         const e=b.e===null?1439:b.e;
         h+=`<div class="blk editable" style="border-left-color:${c.c}" data-id="${b.id}">
           <div class="bt"><div class="btime">${hhmm(b.s)}–${hhmm(e)}</div>
-          <div class="btxt">${c.e} ${esc(b.txt)}</div><div class="bcat">${c.n}</div></div>
+          <div class="btxt">${c.e} ${esc(b.txt)}</div><div class="bcat">${c.n}${b.proj?" · 🎬 "+esc(b.proj):""}</div></div>
           <div class="bdur">${durStr(e-b.s)}</div>
         </div>`;
       }
@@ -578,6 +603,7 @@ function renderDay(){
   $("#view").innerHTML=h;
 
   $("#addBtn").onclick=onAdd;
+  document.querySelectorAll(".qstart").forEach(b=>b.onclick=()=>quickStart(b.dataset.cat));
   const sb=$("#stopBtn"); if(sb) sb.onclick=()=>{ const o=openBlock(getDay(CUR)); if(o){o.e=nowMin(); save(); render();} };
   document.querySelectorAll(".blk.editable").forEach(el=>el.onclick=()=>openEdit(el.dataset.id));
   const obEl=document.querySelector(".blk.now"); if(obEl) obEl.querySelector(".bt").onclick=()=>openEdit(obEl.dataset.id);
@@ -591,6 +617,18 @@ function renderDay(){
   const psb=$("#plainSumBtn"); if(psb) psb.onclick=()=>{ getDay(CUR).summary=""; save(); render(); };
 }
 function fillGap(s,e,txt,cat){ addBlock(getDay(CUR), s, e, txt, cat); save(); render(); }
+function allProjects(){
+  const set=new Set();
+  for(const k in DB.days) for(const b of DB.days[k].blocks) if(b.proj) set.add(b.proj);
+  return [...set].sort();
+}
+function quickStart(cat){
+  const day=getDay(CUR), now=nowMin();
+  const ob=openBlock(day);
+  if(ob) ob.e=Math.max(ob.s+1, now);
+  addBlock(day, now, null, CATS[cat].n, cat);
+  save(); render();
+}
 async function onAdd(){
   const inp=$("#dictInput"); const text=inp.value.trim();
   if(!text) return;
@@ -609,6 +647,8 @@ function openEdit(id){
   const day=getDay(CUR); const b=day.blocks.find(x=>x.id===id); if(!b) return;
   editId=id;
   $("#emTxt").value=b.txt;
+  $("#emProj").value=b.proj||"";
+  $("#projList").innerHTML=allProjects().map(p=>`<option value="${esc(p)}">`).join("");
   $("#emS").value=hhmm(b.s);
   $("#emE").value=hhmm(b.e===null?nowMin():b.e);
   $("#emCats").innerHTML=Object.entries(CATS).map(([k,c])=>`<button class="catchip${k===b.cat?" sel":""}" data-cat="${k}">${c.e} ${c.n}</button>`).join("");
@@ -621,6 +661,7 @@ $("#emSave").onclick=()=>{
   const day=getDay(CUR); const b=day.blocks.find(x=>x.id===editId); if(!b) return;
   const wasCat=b.cat;
   b.txt=$("#emTxt").value.trim()||b.txt;
+  const pv2=$("#emProj").value.trim(); if(pv2) b.proj=pv2; else delete b.proj;
   const sel=$("#emCats").querySelector(".sel"); if(sel) b.cat=sel.dataset.cat;
   const pv=v=>{const p=v.split(":");return +p[0]*60+ +p[1];};
   if($("#emS").value) b.s=pv($("#emS").value);
@@ -695,14 +736,38 @@ function renderCharts(){
     }else{
       h+=`<div class="card">`+keys.slice(RANGE==="week"?0:-14).map(k=>`<div class="striprow"><div class="srl">${dayLabel(k)}</div>${stripHTML(k)}</div>`).join("")+`</div>`;
     }
+    // projekty (czas per projekt w okresie)
+    const projTot={};
+    for(const k of keys){ const d=DB.days[k]; if(!d) continue;
+      const now=k===todayKey()?nowMin():1440;
+      for(const b of d.blocks) if(b.proj){ const e=b.e===null?now:b.e; projTot[b.proj]=(projTot[b.proj]||0)+Math.max(0,e-b.s); }
+    }
+    const projs=Object.entries(projTot).sort((a,b)=>b[1]-a[1]);
+    if(projs.length){
+      h+=`<h2>Projekty</h2><div class="card">${projs.map(([p,m])=>`<div class="leg"><div class="dot" style="background:${CATS.praca.c}"></div><div class="ln">🎬 ${esc(p)}</div><div class="lv">${durStr(m)}</div></div>`).join("")}</div>`;
+    }
     // samopoczucie / sen w okresie
     const moods=keys.map(k=>({k, j:(DB.days[k]||{}).journal})).filter(x=>x.j&&(x.j.mood!=null||x.j.sen!=null));
     if(moods.length>1 && RANGE!=="day"){
       h+=`<h2>Samopoczucie i sen</h2><div class="card">${lineChart(keys)}</div>`;
     }
+    // raport tygodnia (AI)
+    if(RANGE==="week"){
+      const rep=DB.reports[CURC];
+      h+=`<h2>Raport tygodnia</h2><div class="card">`;
+      if(rep) h+=`<div class="summary" style="margin-bottom:10px">${esc(rep)}</div>`;
+      if(SET.apiKey) h+=`<div class="btnrow" style="margin:0"><button class="btn${rep?"":" primary"}" id="weekRepBtn">✨ ${rep?"Odśwież raport":"Wygeneruj raport tygodnia"}</button></div>`;
+      else if(!rep) h+=`<div class="hint" style="margin:0">Dodaj klucz API w zakładce Więcej, żeby AI napisało raport tygodnia.</div>`;
+      h+=`</div>`;
+    }
   }
   $("#view").innerHTML=h;
   document.querySelectorAll(".seg button").forEach(b=>b.onclick=()=>{ RANGE=b.dataset.r; render(); });
+  const wrb=$("#weekRepBtn"); if(wrb) wrb.onclick=async()=>{
+    wrb.textContent="⏳ Piszę raport…"; wrb.disabled=true;
+    try{ DB.reports[CURC]=await aiWeekReport(rangeKeys()); save(); render(); }
+    catch(e){ wrb.textContent="Błąd API — spróbuj ponownie"; wrb.disabled=false; }
+  };
 }
 function lineChart(keys){
   const W=480,H=140,P=24;
@@ -789,6 +854,15 @@ function renderMore(){
       <button class="btn" id="csvBtn">📄 CSV</button>
     </div>
     <input type="file" id="impFile" accept=".json" style="display:none">
+    <div class="frow" style="margin-top:12px"><label style="width:auto;color:var(--mut);font-size:14px">Automatyczna kopia:</label>
+      <select id="abSel" style="flex:1">
+        <option value="day">Codziennie</option>
+        <option value="week">Co tydzień</option>
+        <option value="month">Co miesiąc</option>
+        <option value="off">Wyłączona</option>
+      </select>
+    </div>
+    <div class="hint">Przy otwarciu aplikacji plik kopii sam pobierze się do Pobranych.</div>
   </div>
   <div class="card">
     <div class="btnrow"><button class="btn danger" id="wipeBtn">🗑 Wyczyść wszystkie dane</button></div>
@@ -802,10 +876,9 @@ function renderMore(){
     try{ await callAI("Odpowiedz jednym słowem: OK","test",10); $("#apiStatus").textContent="Działa ✔"; $("#apiStatus").style.color="var(--grn)"; }
     catch(e){ $("#apiStatus").textContent="Błąd: "+e.message; $("#apiStatus").style.color="var(--red)"; }
   };
-  $("#expBtn").onclick=()=>{
-    const blob=new Blob([JSON.stringify({db:DB,set:{learned:SET.learned}},null,1)],{type:"application/json"});
-    const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="dziennik-kopia-"+todayKey()+".json"; a.click();
-  };
+  $("#expBtn").onclick=doExport;
+  $("#abSel").value=SET.autoBackup.freq;
+  $("#abSel").onchange=()=>{ SET.autoBackup.freq=$("#abSel").value; saveSet(); };
   $("#impBtn").onclick=()=>$("#impFile").click();
   $("#impFile").onchange=e=>{
     const f=e.target.files[0]; if(!f) return;
@@ -818,11 +891,11 @@ function renderMore(){
     r.readAsText(f);
   };
   $("#csvBtn").onclick=()=>{
-    let csv="data;od;do;minuty;kategoria;opis\n";
+    let csv="data;od;do;minuty;kategoria;projekt;opis\n";
     for(const k of Object.keys(DB.days).sort()){
       for(const b of DB.days[k].blocks){
         const e=b.e===null?(k===todayKey()?nowMin():1439):b.e;
-        csv+=[k,hhmm(b.s),hhmm(e),e-b.s,CATS[b.cat].n,'"'+b.txt.replace(/"/g,"'")+'"'].join(";")+"\n";
+        csv+=[k,hhmm(b.s),hhmm(e),e-b.s,CATS[b.cat].n,b.proj||"",'"'+b.txt.replace(/"/g,"'")+'"'].join(";")+"\n";
       }
     }
     const blob=new Blob(["﻿"+csv],{type:"text/csv"});
@@ -831,8 +904,22 @@ function renderMore(){
   $("#wipeBtn").onclick=()=>{ if(confirm("Na pewno usunąć WSZYSTKIE dane? Zrób najpierw eksport!")){ DB={days:{}}; save(); alert("Usunięto"); render(); } };
 }
 
+function doExport(){
+  const blob=new Blob([JSON.stringify({db:DB,set:{learned:SET.learned}},null,1)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="dziennik-kopia-"+todayKey()+".json"; a.click();
+}
+function checkAutoBackup(){
+  const ab=SET.autoBackup;
+  if(!ab || ab.freq==="off") return;
+  const per={day:864e5, week:7*864e5, month:30*864e5}[ab.freq]||7*864e5;
+  if(Date.now()-(ab.last||0) < per) return;
+  if(!Object.keys(DB.days).length) return;
+  doExport(); ab.last=Date.now(); saveSet();
+}
+
 /* ============ START ============ */
 closeStaleOpen();
+checkAutoBackup();
 render();
 setInterval(()=>{
   if(TAB!=="day" || CUR!==todayKey()) return;
