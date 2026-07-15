@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0d0d">
+<title>Dziennik</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{
+  --bg:#0d0d0d; --card:#1a1a1c; --card2:#242428; --line:#2e2e33;
+  --txt:#f2f2f4; --mut:#9a9aa2; --acc:#4f9cf9; --red:#f95f5f; --grn:#43d97b;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{background:var(--bg);color:var(--txt);font-family:-apple-system,system-ui,sans-serif;font-size:16px}
+body{padding-bottom:calc(72px + env(safe-area-inset-bottom))}
+h1{font-size:20px;font-weight:700}
+h2{font-size:15px;font-weight:600;color:var(--mut);margin:18px 0 8px;text-transform:uppercase;letter-spacing:.5px}
+.wrap{max-width:560px;margin:0 auto;padding:14px}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:6px 0 10px}
+.datenav{display:flex;align-items:center;gap:4px}
+.datenav button{background:var(--card);border:1px solid var(--line);color:var(--txt);border-radius:10px;width:36px;height:36px;font-size:17px}
+.datenav .dlabel{min-width:130px;text-align:center;font-weight:600;font-size:15px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:10px}
+textarea{width:100%;background:var(--card2);border:1px solid var(--line);border-radius:10px;color:var(--txt);padding:10px;font-size:16px;font-family:inherit;resize:vertical;min-height:64px}
+input,select{background:var(--card2);border:1px solid var(--line);border-radius:10px;color:var(--txt);padding:9px 10px;font-size:16px;font-family:inherit}
+input[type=time]{width:auto}
+.btn{background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:10px 14px;font-size:15px;font-weight:600}
+.btn.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+.btn.danger{background:transparent;border-color:var(--red);color:var(--red)}
+.btn:active{opacity:.7}
+.btnrow{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.hint{color:var(--mut);font-size:13px;margin-top:8px;line-height:1.4}
+/* timeline */
+.blk{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--mut);border-radius:12px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px}
+.blk .bt{flex:1;min-width:0}
+.blk .btime{font-size:13px;color:var(--mut);font-variant-numeric:tabular-nums}
+.blk .btxt{font-size:15px;font-weight:600;margin:2px 0;overflow:hidden;text-overflow:ellipsis}
+.blk .bcat{font-size:12px;color:var(--mut)}
+.blk .bdur{font-size:14px;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
+.blk.now{border-style:dashed}
+.gap{background:transparent;border:1px dashed var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px}
+.gap .gq{font-size:14px;color:var(--mut);margin-bottom:8px}
+.catgrid{display:flex;flex-wrap:wrap;gap:6px}
+.catchip{background:var(--card2);border:1px solid var(--line);border-radius:20px;padding:6px 10px;font-size:13px;color:var(--txt)}
+.catchip.sel{border-color:var(--acc);background:rgba(79,156,249,.15)}
+.gaprow{display:flex;gap:6px;margin-top:8px}
+.gaprow input{flex:1}
+/* strip 24h */
+.strip{display:flex;height:26px;border-radius:8px;overflow:hidden;background:var(--card2);margin:6px 0}
+.striplabels{display:flex;justify-content:space-between;font-size:11px;color:var(--mut);font-variant-numeric:tabular-nums}
+.striprow{margin-bottom:10px}
+.striprow .srl{font-size:12px;color:var(--mut);margin-bottom:3px}
+/* donut + legend */
+.donutwrap{display:flex;align-items:center;gap:16px}
+.legend{flex:1}
+.leg{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:14px}
+.leg .dot{width:12px;height:12px;border-radius:4px;flex:none}
+.leg .ln{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.leg .lv{color:var(--mut);font-variant-numeric:tabular-nums;white-space:nowrap}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px}
+.tile .tv{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
+.tile .tl{font-size:12px;color:var(--mut);margin-top:2px}
+.seg{display:flex;background:var(--card2);border-radius:10px;padding:3px;margin-bottom:12px}
+.seg button{flex:1;background:transparent;border:0;color:var(--mut);padding:8px;border-radius:8px;font-size:14px;font-weight:600}
+.seg button.on{background:var(--card);color:var(--txt)}
+/* journal */
+.metric{display:flex;align-items:center;gap:10px;margin:10px 0}
+.metric label{width:120px;font-size:14px;color:var(--mut)}
+.metric input[type=range]{flex:1}
+.metric .mv{width:44px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+.jentry{border-bottom:1px solid var(--line);padding:10px 0}
+.jentry:last-child{border:0}
+.jentry .jd{font-size:13px;color:var(--mut);margin-bottom:4px}
+.jentry .jtxt{font-size:14px;line-height:1.45;white-space:pre-wrap}
+.jchips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.jchip{font-size:12px;background:var(--card2);border-radius:14px;padding:3px 9px;color:var(--mut)}
+/* nav */
+.nav{position:fixed;bottom:0;left:0;right:0;background:rgba(20,20,22,.97);border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom);z-index:50}
+.nav button{flex:1;background:transparent;border:0;color:var(--mut);padding:9px 0 7px;font-size:11px;display:flex;flex-direction:column;align-items:center;gap:2px}
+.nav button .ni{font-size:21px}
+.nav button.on{color:var(--acc)}
+/* modal */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-end;justify-content:center;z-index:100}
+.modal.open{display:flex}
+.sheet{background:var(--card);border-radius:18px 18px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));width:100%;max-width:560px;max-height:85vh;overflow-y:auto}
+.sheet h3{font-size:17px;margin-bottom:12px}
+.frow{display:flex;gap:8px;align-items:center;margin:10px 0}
+.frow label{width:70px;color:var(--mut);font-size:14px}
+.summary{font-size:15px;line-height:1.55;white-space:pre-wrap}
+.tag{display:inline-block;font-size:12px;border-radius:12px;padding:2px 8px;margin-left:6px;vertical-align:middle}
+#apiStatus{margin-top:8px;font-size:13px}
+.empty{color:var(--mut);text-align:center;padding:26px 10px;font-size:14px;line-height:1.5}
+svg text{font-family:inherit}
+.linechart{width:100%;height:auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <h1 id="tabTitle">Dzień</h1>
+    <div class="datenav" id="dateNav">
+      <button id="dPrev">‹</button>
+      <div class="dlabel" id="dLabel"></div>
+      <button id="dNext">›</button>
+    </div>
+  </div>
+  <div id="view"></div>
+</div>
+
+<div class="nav">
+  <button data-tab="day" class="on"><span class="ni">🕐</span>Dzień</button>
+  <button data-tab="charts"><span class="ni">📊</span>Wykresy</button>
+  <button data-tab="journal"><span class="ni">📓</span>Dziennik</button>
+  <button data-tab="more"><span class="ni">⚙️</span>Więcej</button>
+</div>
+
+<div class="modal" id="editModal">
+  <div class="sheet">
+    <h3>Edytuj blok</h3>
+    <div class="frow"><label>Co?</label><input id="emTxt" style="flex:1"></div>
+    <div class="frow"><label>Od</label><input type="time" id="emS"><label style="width:auto">Do</label><input type="time" id="emE"></div>
+    <div style="margin:10px 0"><div class="hint" style="margin:0 0 6px">Kategoria:</div><div class="catgrid" id="emCats"></div></div>
+    <div class="btnrow">
+      <button class="btn primary" id="emSave">Zapisz</button>
+      <button class="btn danger" id="emDel">Usuń</button>
+      <button class="btn" id="emCancel">Anuluj</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ================= DANE ================= */
+const CATS = {
+  sen:       {n:"Sen",          e:"😴", c:"#7c6ff0"},
+  praca:     {n:"Praca",        e:"💼", c:"#4f9cf9"},
+  jedzenie:  {n:"Jedzenie",     e:"🍳", c:"#f9a84f"},
+  higiena:   {n:"Higiena",      e:"🚿", c:"#4fd8f9"},
+  porzadki:  {n:"Porządki",     e:"🧹", c:"#c9a15f"},
+  sport:     {n:"Sport",        e:"🏃", c:"#43d97b"},
+  strata:    {n:"Strata czasu", e:"📱", c:"#f95f5f"},
+  odpoczynek:{n:"Odpoczynek",   e:"🌴", c:"#f9d64f"},
+  transport: {n:"Transport",    e:"🚗", c:"#9aa5b1"},
+  zakupy:    {n:"Zakupy",       e:"🛒", c:"#f97fd0"},
+  ludzie:    {n:"Ludzie",       e:"👥", c:"#b57ff9"},
+  sprawy:    {n:"Sprawy",       e:"📋", c:"#6fd9c0"},
+  inne:      {n:"Inne",         e:"❔", c:"#8a8f98"}
+};
+const KW = [
+  ["montaż","praca"],["montow","praca"],["montuj","praca"],["edytuj","praca"],["edycj","praca"],
+  ["render","praca"],["scenariusz","praca"],["klient","praca"],["mail","praca"],["faktur","praca"],
+  ["resolve","praca"],["kolor koryg","praca"],["gradin","praca"],["nagryw","praca"],["kręc","praca"],
+  ["zdjęciow","praca"],["zleceni","praca"],["projekt","praca"],["prac","praca"],["robot","praca"],
+  ["drzemk","sen"],["spał","sen"],["śpię","sen"],["spać","sen"],["sen","sen"],
+  ["śniadan","jedzenie"],["obiad","jedzenie"],["kolacj","jedzenie"],["gotow","jedzenie"],
+  ["jedzeni","jedzenie"],["jadł","jedzenie"],["zjadł","jedzenie"],["posiłek","jedzenie"],["jem ","jedzenie"],
+  ["prysznic","higiena"],["kąpiel","higiena"],["umył","higiena"],["myłem","higiena"],["myję","higiena"],
+  ["zęb","higiena"],["goli","higiena"],["łazienk","higiena"],
+  ["sprząt","porzadki"],["zmyw","porzadki"],["prani","porzadki"],["pior","porzadki"],
+  ["naczyni","porzadki"],["śmieci","porzadki"],["porządk","porzadki"],["odkurz","porzadki"],
+  ["trening","sport"],["trenow","sport"],["siłown","sport"],["biega","sport"],["deskorolk","sport"],
+  ["skate","sport"],["wspinacz","sport"],["rower","sport"],["ćwicz","sport"],["rozciąg","sport"],["basen","sport"],
+  ["scroll","strata"],["scrol","strata"],["tiktok","strata"],["instagram","strata"],["insta","strata"],
+  ["youtube","strata"],["jutub","strata"],["facebook","strata"],["fejs","strata"],["shorts","strata"],
+  ["rolki oglądał","strata"],["leżał","strata"],["marnow","strata"],["nic nie robił","strata"],["przeglądał telefon","strata"],
+  ["odpoczy","odpoczynek"],["serial","odpoczynek"],["netflix","odpoczynek"],["czytał","odpoczynek"],
+  ["książk","odpoczynek"],["grał","odpoczynek"],["gram ","odpoczynek"],["muzyk","odpoczynek"],
+  ["relaks","odpoczynek"],["spacer","odpoczynek"],["medytu","odpoczynek"],["film oglądał","odpoczynek"],["oglądał film","odpoczynek"],
+  ["jechał","transport"],["jadę","transport"],["dojazd","transport"],["autobus","transport"],
+  ["pociąg","transport"],["samoch","transport"],["uber","transport"],["tramwaj","transport"],["metro","transport"],
+  ["zakup","zakupy"],["sklep","zakupy"],["biedronk","zakupy"],["lidl","zakupy"],["żabk","zakupy"],["galeri","zakupy"],
+  ["spotka","ludzie"],["znajom","ludzie"],["rozmawia","ludzie"],["rodzin","ludzie"],["dziewczyn","ludzie"],
+  ["kumpel","ludzie"],["imprez","ludzie"],["dzwonił","ludzie"],
+  ["urząd","sprawy"],["urzęd","sprawy"],["lekarz","sprawy"],["dentyst","sprawy"],["bank","sprawy"],
+  ["załatwia","sprawy"],["poczt","sprawy"],["przychodni","sprawy"]
+];
+const PUNCTUAL = /wstał|obudził|budzik|skończył|wrócił|przyszed|dotarł|\bkoniec\b/;
+const DURATIVE = /zaczynam|zaczął|zaczęł|zabieram się|siadam|siadł|idę |lecę |będę|robię|pracuję|montuję|sprzątam|odpoczywam|wychodzę|kładę się/;
+const PRESENT = /zaczynam|zabieram|siadam|idę|lecę|robię|pracuję|montuję|sprzątam|odpoczywam|wychodzę|kładę|będę|\bjem\b|\bgram\b/;
+
+let DB = loadLS("dziennik_db", {days:{}});
+let SET = loadLS("dziennik_set", {apiKey:"", learned:{}});
+let TAB = "day";
+let CUR = todayKey();          // data widoczna na Dzień/Dziennik
+let RANGE = "day";             // zakres w Wykresach: day/week/month
+let CURC = todayKey();         // data w Wykresach
+let editId = null;
+
+function loadLS(k, def){ try{ return Object.assign(def, JSON.parse(localStorage.getItem(k)||"{}")); }catch(e){ return def; } }
+function save(){ localStorage.setItem("dziennik_db", JSON.stringify(DB)); }
+function saveSet(){ localStorage.setItem("dziennik_set", JSON.stringify(SET)); }
+function todayKey(d){ d = d||new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function keyToDate(k){ const p=k.split("-"); return new Date(+p[0], +p[1]-1, +p[2]); }
+function shiftKey(k, n){ const d=keyToDate(k); d.setDate(d.getDate()+n); return todayKey(d); }
+function nowMin(){ const d=new Date(); return d.getHours()*60+d.getMinutes(); }
+function getDay(k){ if(!DB.days[k]) DB.days[k]={blocks:[],journal:null,summary:""}; return DB.days[k]; }
+function hhmm(m){ return String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0"); }
+function durStr(m){ m=Math.round(m); if(m<60) return m+" min"; const h=Math.floor(m/60), r=m%60; return r? h+" h "+r+" min" : h+" h"; }
+function esc(s){ return String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+const DOWS=["niedziela","poniedziałek","wtorek","środa","czwartek","piątek","sobota"];
+const MONS=["sty","lut","mar","kwi","maj","cze","lip","sie","wrz","paź","lis","gru"];
+function dayLabel(k){
+  if(k===todayKey()) return "Dziś";
+  if(k===shiftKey(todayKey(),-1)) return "Wczoraj";
+  const d=keyToDate(k); return DOWS[d.getDay()].slice(0,3)+", "+d.getDate()+" "+MONS[d.getMonth()];
+}
+
+/* ============ KATEGORYZACJA ============ */
+function norm(s){ return " "+s.toLowerCase().replace(/\s+/g," ").trim()+" "; }
+function catOf(text){
+  const t = norm(text);
+  for(const k in SET.learned){ if(t.includes(k)) return SET.learned[k]; }
+  for(const [stem,cat] of KW){ if(t.includes(stem)) return cat; }
+  return "inne";
+}
+function learn(text, cat){
+  const t = text.toLowerCase().trim();
+  if(t.length>2 && t.length<40){ SET.learned[t]=cat; saveSet(); }
+}
+
+/* ============ PARSER CZASU (PL) ============ */
+const HOUR_WORDS = [
+  ["dwudziestej trzeciej",23],["dwudziesta trzecia",23],["dwudziestej drugiej",22],["dwudziesta druga",22],
+  ["dwudziestej pierwszej",21],["dwudziesta pierwsza",21],["dwudziest",20],["dziewiętnast",19],
+  ["osiemnast",18],["siedemnast",17],["szesnast",16],["piętnast",15],["czternast",14],["trzynast",13],
+  ["dwunast",12],["jedenast",11],["dziesiąt",10],["dziewiąt",9],["ósm",8],["siódm",7],["szóst",6],
+  ["piąt",5],["czwart",4],["trzeci",3],["drug",2],["pierwsz",1],["północ",0]
+];
+const MIN_WORDS = [
+  ["pięćdziesiąt pięć",55],["pięćdziesiąt",50],["czterdzieści pięć",45],["czterdzieści",40],
+  ["trzydzieści pięć",35],["trzydzieści",30],["dwadzieścia pięć",25],["dwadzieścia",20],
+  ["piętnaście",15],["kwadrans",15],["dziesięć",10],["pięć",5]
+];
+// ctx = {last: minuty ostatniego zdarzenia, now: minuty teraz, isToday: bool}
+function resolveHour(h, m, txt, ctx){
+  if(/rano|nad ranem/.test(txt) && h>=13) h-=12;
+  if(/wieczor|wieczór|po południu|popołudni/.test(txt) && h<12) h+=12;
+  else if(h>=1 && h<=11){
+    const a=h*60+m, b=(h+12)*60+m;
+    const hi = ctx.isToday ? ctx.now+15 : 1439;
+    const okA = a>=ctx.last && a<=hi, okB = b>=ctx.last && b<=hi;
+    if(!okA && okB) h+=12;
+    else if(!okA && !okB && ctx.isToday){ h = Math.abs(a-ctx.now)<=Math.abs(b-ctx.now)? h : h+12; }
+  }
+  return Math.min(h*60+m, 1439);
+}
+function findTime(clause, ctx){
+  const t = clause.toLowerCase();
+  let m;
+  // teraz / właśnie / przed chwilą / X minut temu / godzinę temu
+  if(ctx.isToday){
+    if(/przed chwilą|przed momentem/.test(t)) return Math.max(0,ctx.now-5);
+    if((m=t.match(/(\d+)\s*minut\w*\s+temu/))) return Math.max(0,ctx.now-parseInt(m[1]));
+    if(/pół godziny temu/.test(t)) return Math.max(0,ctx.now-30);
+    if((m=t.match(/(\d+)?\s*godzin\w*\s+temu/))) return Math.max(0,ctx.now-60*(m[1]?parseInt(m[1]):1));
+    if(/teraz|właśnie|w tej chwili|obecnie|aktualnie|\bjuż\b/.test(t)) return ctx.now;
+  }
+  // 7:30 / 7.30
+  if((m=t.match(/(\d{1,2})[:.](\d{2})/))){
+    return resolveHour(parseInt(m[1]), parseInt(m[2]), t, ctx);
+  }
+  // wpół do ósmej / wpół do 8
+  if((m=t.match(/w\s?pół do\s+(\d{1,2})/))) return resolveHour(parseInt(m[1])===0?23:parseInt(m[1])-1,30,t,ctx);
+  if((m=t.match(/w\s?pół do\s+(\S+)/))){
+    for(const [w,h] of HOUR_WORDS){ if(m[1].startsWith(w)||t.includes("do "+w)) return resolveHour(h===0?23:h-1,30,t,ctx); }
+  }
+  // za piętnaście ósma / za 10 ósma
+  if((m=t.match(/za\s+(\d+|piętnaście|dziesięć|pięć|kwadrans)\s+(\S+)/))){
+    let mins = /\d+/.test(m[1]) ? parseInt(m[1]) : (m[1]==="kwadrans"?15:(MIN_WORDS.find(x=>x[0]===m[1])||[0,0])[1]);
+    for(const [w,h] of HOUR_WORDS){ if(m[2].startsWith(w)){ const base=resolveHour(h,0,t,ctx); return Math.max(0,base-mins); } }
+  }
+  // "o 7", "od 19", "koło 8"
+  if((m=t.match(/(?:^|\s)(?:o|od|około|koło|po)\s+(\d{1,2})(?!\d)/))){
+    return resolveHour(parseInt(m[1]), 0, t, ctx);
+  }
+  // godziny słownie: "o siódmej (trzydzieści)"
+  for(const [w,h] of HOUR_WORDS){
+    const i = t.indexOf(w);
+    if(i>=0 && /(?:o|od|około|koło|po|była|jest|godzina|godzinie|godzinę)\s+$/.test(t.slice(0,i).replace(/\s+/g," ")) || (i>=0 && /siódm|ósm|dziewiąt|dziesiąt|jedenast|dwunast|trzynast|czternast|piętnast|szesnast|siedemnast|osiemnast|dziewiętnast|dwudziest|północ/.test(w) && /(?:o|od|około|koło)\s/.test(t))){
+      let mins = 0;
+      const rest = t.slice(i+w.length, i+w.length+30);
+      for(const [mw,mv] of MIN_WORDS){ if(rest.trim().startsWith(mw)||rest.includes(" "+mw)){ mins=mv; break; } }
+      const dm = rest.match(/^\w*\s+(\d{1,2})(?!\d)/);
+      if(!mins && dm) mins=Math.min(59,parseInt(dm[1]));
+      return resolveHour(h, mins, t, ctx);
+    }
+  }
+  // samotna liczba na początku: "7:40 zacząłem..." już złapane; "19 wróciłem"
+  if((m=t.match(/^\s*(\d{1,2})(?!\d)\s/))) return resolveHour(parseInt(m[1]),0,t,ctx);
+  return null;
+}
+// "od 10 do 12" — jawny koniec bloku
+function findEnd(clause, startT, ctx){
+  const t = clause.toLowerCase();
+  const c2 = {last:startT, now:ctx.now, isToday:ctx.isToday};
+  if(/w\s?pół do/.test(t)) return null;
+  let m;
+  if((m=t.match(/\bdo\s+(\d{1,2})(?:[:.](\d{2}))?(?!\d)/)))
+    return resolveHour(parseInt(m[1]), m[2]?parseInt(m[2]):0, t, c2);
+  if((m=t.match(/\bdo\s+(\S+)/)) && !/wpół/.test(t.slice(0,m.index))){
+    for(const [w,h] of HOUR_WORDS){ if(m[1].startsWith(w)) return resolveHour(h,0,t,c2); }
+  }
+  return null;
+}
+
+/* ============ PARSER DYKTOWANIA ============ */
+function splitClauses(text){
+  return text
+    .split(/[,.;\n]+| i (?=o |od |do |teraz|właśnie|potem|później|następnie|w |koło |około )| (?:i|a) (?=[a-ząćęłńóśźż]+(?:łem|łam|uję|ynam|iam|adam)\b)/)
+    .map(s=>s.trim()).filter(s=>s.length>1);
+}
+function parseLocal(text, dateKey){
+  const isToday = dateKey===todayKey();
+  const ctx = {last:0, now: isToday? nowMin() : 1439, isToday};
+  const events=[];
+  for(const cl of splitClauses(text)){
+    // pomiń czyste stwierdzenie godziny ("jest godzina ósma", "jest 8:00")
+    let leftover = cl.toLowerCase().replace(/\d{1,2}[:.]?\d{0,2}/g," ")
+      .replace(/jest|godzin\w*|teraz|już|około|koło|w\s?pół|\bdo\b|\bo\b|\bod\b|rano|wieczorem|obecnie|aktualnie/g," ");
+    for(const [w] of HOUR_WORDS) leftover=leftover.replace(w," ");
+    for(const [w] of MIN_WORDS) leftover=leftover.replace(w," ");
+    const bare = findTime(cl,ctx)!==null && !/[a-ząćęłńóśźż]{3,}/.test(leftover);
+    let t = findTime(cl, ctx);
+    if(t===null) t = (ctx.isToday && PRESENT.test(cl.toLowerCase())) ? ctx.now : ctx.last;
+    if(bare){ if(!ctx.isToday) ctx.now=Math.max(ctx.now===1439?0:ctx.now, t); continue; }
+    const end = findEnd(cl, t, ctx); // "od 10 do 12"
+    // tekst czynności: usuń frazę czasu
+    let txt = cl.replace(/w\s?pół do \S+/i,"")
+                .replace(/(?:^|\s)(o|od|około|koło)\s+\S+([:.]\d{2})?( rano| wieczorem)?/i,"")
+                .replace(/\bdo\s+\d{1,2}([:.]\d{2})?/i,"")
+                .replace(/\d{1,2}[:.]\d{2}/,"")
+                .replace(/przed chwilą|w tej chwili|właśnie|teraz/gi,"")
+                .replace(/^\s*(pięćdziesiąt pięć|pięćdziesiąt|czterdzieści pięć|czterdzieści|trzydzieści pięć|trzydzieści|dwadzieścia pięć|dwadzieścia|piętnaście|kwadrans|dziesięć|pięć|zero)\s+/,"")
+                .replace(/^\s*(i|a|to|o|od|do|potem|później|następnie)\s+/i,"")
+                .replace(/\s+(o|od|do|w|na)\s*$/i,"").replace(/\s+/g," ").trim();
+    if(!txt) { ctx.last=Math.max(ctx.last, end??t); continue; }
+    const fill = DURATIVE.test(cl.toLowerCase()) ? "forward" : (PUNCTUAL.test(cl.toLowerCase()) ? "none" : "forward");
+    events.push({t, end: end!==null && end>t ? end : undefined, txt, cat: catOf(txt), fill, punct: PUNCTUAL.test(cl.toLowerCase())});
+    ctx.last = Math.max(ctx.last, (end!==null && end>t)? end : t);
+  }
+  events.sort((a,b)=>a.t-b.t);
+  return events;
+}
+
+/* ============ ZDARZENIA → BLOKI ============ */
+function sortBlocks(day){ day.blocks.sort((a,b)=>a.s-b.s); }
+function addBlock(day, s, e, txt, cat){
+  // przytnij do wolnych miejsc (bez nakładania na istniejące bloki)
+  const isToday_e = e; let segs=[[s, e===null? null : e]];
+  for(const b of day.blocks){
+    const be = b.e===null? 1440 : b.e;
+    segs = segs.flatMap(([x,y])=>{
+      const yy = y===null? 1440 : y;
+      if(be<=x || b.s>=yy) return [[x,y]];
+      const out=[];
+      if(x<b.s) out.push([x,b.s]);
+      if(yy>be) out.push([be, y===null? null : y]);
+      return out;
+    });
+  }
+  for(const [x,y] of segs){
+    const yy=y===null?null:y;
+    if(yy!==null && yy-x<2) continue;
+    day.blocks.push({id:uid(), s:x, e:yy, txt, cat});
+  }
+  sortBlocks(day);
+}
+function openBlock(day){ return day.blocks.find(b=>b.e===null); }
+function applyEvents(dateKey, events){
+  if(!events.length) return;
+  const day = getDay(dateKey);
+  const ob = openBlock(day);
+  if(ob && events[0].t > ob.s) ob.e = Math.min(events[0].t, 1439);
+  else if(ob) ob.e = ob.s+1;
+  // pobudka → sen od północy
+  const wake = events.find(ev=>/wstał|obudził|budzik/.test(ev.txt.toLowerCase()));
+  if(wake && wake.t<=780 && !day.blocks.some(b=>b.s<wake.t)) addBlock(day, 0, wake.t, "sen", "sen");
+  for(let i=0;i<events.length;i++){
+    const ev=events[i], nx=events[i+1];
+    if(ev.fill==="none") continue;
+    let end = ev.end!=null ? ev.end : (nx ? nx.t : null);
+    if(end!==null && end<=ev.t) continue;
+    if(end===null && dateKey!==todayKey()) end=Math.min(ev.t+30,1439); // nie zostawiaj otwartych bloków w przeszłości
+    addBlock(day, ev.t, end, ev.txt, ev.cat);
+  }
+  save();
+}
+function closeStaleOpen(){
+  // otwarte bloki z poprzednich dni domykamy o 23:59
+  const tk=todayKey();
+  for(const k in DB.days){ if(k!==tk){ const ob=openBlock(DB.days[k]); if(ob) ob.e=1439; } }
+  save();
+}
+
+/* ============ AI (Claude API) ============ */
+async function callAI(system, user, maxTok){
+  const res = await fetch("https://api.anthropic.com/v1/messages",{
+    method:"POST",
+    headers:{"content-type":"application/json","x-api-key":SET.apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+    body:JSON.stringify({model:"claude-haiku-4-5-20251001", max_tokens:maxTok||600, system, messages:[{role:"user",content:user}]})
+  });
+  if(!res.ok) throw new Error("API "+res.status);
+  const data = await res.json();
+  return (data.content&&data.content[0]&&data.content[0].text)||"";
+}
+async function aiParse(text, dateKey){
+  const isToday = dateKey===todayKey();
+  const catList = Object.keys(CATS).join(", ");
+  const sys = `Analizujesz dyktowany po polsku opis dnia i zamieniasz go na zdarzenia z czasem. Zwróć TYLKO JSON: {"events":[{"t":"HH:MM","txt":"krótki opis czynności","cat":"kategoria","fill":"forward|none"}]}.
+Kategorie: ${catList}. strata = scrollowanie/social media/bezczynność; odpoczynek = świadomy relaks (serial, książka, spacer); praca = praca zawodowa/montaż filmów.
+fill="forward" gdy czynność trwa od tego momentu do następnego zdarzenia (np. "zacząłem pracować", "umyłem się"); fill="none" gdy to tylko punkt w czasie kończący coś (np. "wstałem", "zjadłem", "wróciłem") — czas przed następnym zdarzeniem pozostaje wtedy nieznany.
+Godziny bez rano/wieczorem interpretuj rozsądnie względem kontekstu. Aktualny czas: ${isToday? hhmm(nowMin()) : "koniec dnia"}. "teraz/właśnie" = aktualny czas. Zdarzenia posortuj chronologicznie.`;
+  const txt = await callAI(sys, text, 800);
+  const jm = txt.match(/\{[\s\S]*\}/);
+  if(!jm) throw new Error("brak JSON");
+  const evs = (JSON.parse(jm[0]).events||[]).map(ev=>{
+    const p = String(ev.t||"").match(/(\d{1,2}):(\d{2})/);
+    if(!p) return null;
+    const cat = CATS[ev.cat]? ev.cat : catOf(ev.txt||"");
+    return {t:Math.min(parseInt(p[1])*60+parseInt(p[2]),1439), txt:String(ev.txt||"").slice(0,80), cat, fill: ev.fill==="none"?"none":"forward"};
+  }).filter(Boolean).sort((a,b)=>a.t-b.t);
+  return evs;
+}
+async function aiSummary(dateKey){
+  const day = getDay(dateKey);
+  const lines = day.blocks.map(b=>`${hhmm(b.s)}-${b.e===null?"teraz":hhmm(b.e)} ${CATS[b.cat].n}: ${b.txt}`).join("\n");
+  const j = day.journal;
+  const jt = j? `\nDziennik: ${j.txt||""} (samopoczucie ${j.mood??"-"}/10, sen ${j.sen??"-"} h, energia ${j.energia??"-"}/10, stres ${j.stres??"-"}/10${j.sport?", sport: tak":""})` : "";
+  const sys = "Napisz krótkie (4-6 zdań), ciepłe ale szczere podsumowanie dnia po polsku, w 2. osobie. Zauważ co poszło dobrze, delikatnie wskaż stratę czasu jeśli była duża. Bez nagłówków, sam tekst.";
+  return await callAI(sys, `Dzień ${dateKey}:\n${lines}${jt}`, 500);
+}
+
+/* ============ PODSUMOWANIE (szablon) ============ */
+function dayTotals(dateKey){
+  const day = DB.days[dateKey]; const tot={};
+  if(!day) return tot;
+  const now = dateKey===todayKey()? nowMin() : 1440;
+  for(const b of day.blocks){
+    const e = b.e===null? now : b.e;
+    tot[b.cat]=(tot[b.cat]||0)+Math.max(0,e-b.s);
+  }
+  return tot;
+}
+function makeSummary(dateKey){
+  const day = DB.days[dateKey];
+  if(!day || !day.blocks.length) return "Brak zapisanych czynności tego dnia.";
+  const tot = dayTotals(dateKey);
+  const parts=[];
+  const senB = day.blocks.find(b=>b.cat==="sen" && b.s===0);
+  const first = day.blocks.find(b=>b.cat!=="sen");
+  if(senB && senB.e) parts.push("⏰ Wstałeś o "+hhmm(senB.e)+".");
+  else if(first) parts.push("⏰ Pierwszy wpis: "+hhmm(first.s)+".");
+  const sorted = Object.entries(tot).filter(([c])=>c!=="sen").sort((a,b)=>b[1]-a[1]);
+  if(sorted.length){
+    const [tc,tm]=sorted[0];
+    parts.push("🏆 Najwięcej czasu: "+CATS[tc].e+" "+CATS[tc].n+" — "+durStr(tm)+".");
+    const rest = sorted.slice(1,5).map(([c,m])=>CATS[c].e+" "+durStr(m)).join(" · ");
+    if(rest) parts.push(rest);
+  }
+  if(tot.strata){
+    const awake = Object.entries(tot).filter(([c])=>c!=="sen").reduce((s,[,m])=>s+m,0);
+    parts.push("📱 Strata czasu: "+durStrong(tot.strata)+(awake? " ("+Math.round(100*tot.strata/awake)+"% aktywnego dnia)":"")+".");
+  }
+  // nieopisane luki
+  let gap=0; const bs=day.blocks;
+  for(let i=1;i<bs.length;i++){ const pe=bs[i-1].e===null?nowMin():bs[i-1].e; if(bs[i].s-pe>4) gap+=bs[i].s-pe; }
+  if(gap>14) parts.push("❔ Nieopisane: "+durStr(gap)+".");
+  const j=day.journal;
+  if(j && (j.mood!=null||j.sen!=null)) parts.push("📓 "+[j.mood!=null?"Samopoczucie "+j.mood+"/10":null, j.sen!=null?"sen "+j.sen+" h":null, j.sport?"sport ✔":null].filter(Boolean).join(", ")+".");
+  return parts.join("\n");
+}
+function durStrong(m){ return durStr(m); }
+
+/* ============ DZIENNIK: metryki z tekstu ============ */
+function parseJournal(text){
+  const t=text.toLowerCase(); const out={};
+  let m;
+  if((m=t.match(/samopoczucie\D{0,12}(\d{1,2})/))) out.mood=Math.min(10,+m[1]);
+  else if((m=t.match(/czuję się na\s+(\d{1,2})/))) out.mood=Math.min(10,+m[1]);
+  if((m=t.match(/energi\w*\D{0,10}(\d{1,2})/))) out.energia=Math.min(10,+m[1]);
+  if((m=t.match(/stres\w*\D{0,10}(\d{1,2})/))) out.stres=Math.min(10,+m[1]);
+  if((m=t.match(/(?:spał[ea]?m|sen)\D{0,14}(\d{1,2})(?:[.,](\d))?\s*(?:h|godz|$|\s)/))) out.sen=+m[1]+(m[2]? +m[2]/10 : 0);
+  if(/sport|trening|siłowni|trenował|deskorolk|wspinacz|biegał/.test(t)) out.sport=true;
+  return out;
+}
+
+/* ============ RENDER ============ */
+const $ = s=>document.querySelector(s);
+function setTab(t){
+  TAB=t;
+  document.querySelectorAll(".nav button").forEach(b=>b.classList.toggle("on", b.dataset.tab===t));
+  $("#tabTitle").textContent = {day:"Dzień",charts:"Wykresy",journal:"Dziennik",more:"Więcej"}[t];
+  $("#dateNav").style.visibility = (t==="more") ? "hidden" : "visible";
+  render();
+}
+document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
+$("#dPrev").onclick=()=>{ if(TAB==="charts") CURC=shiftKey(CURC, RANGE==="day"?-1:RANGE==="week"?-7:-30); else CUR=shiftKey(CUR,-1); render(); };
+$("#dNext").onclick=()=>{ if(TAB==="charts") CURC=shiftKey(CURC, RANGE==="day"?1:RANGE==="week"?7:30); else CUR=shiftKey(CUR,1); render(); };
+
+function render(){
+  const k = TAB==="charts"? CURC : CUR;
+  $("#dLabel").textContent = TAB==="charts" && RANGE!=="day" ? (RANGE==="week"?"tydzień do ":"miesiąc do ")+dayLabel(k) : dayLabel(k);
+  if(TAB==="day") renderDay();
+  else if(TAB==="charts") renderCharts();
+  else if(TAB==="journal") renderJournal();
+  else renderMore();
+}
+
+/* ---- Dzień ---- */
+function renderDay(){
+  const day = DB.days[CUR];
+  const isToday = CUR===todayKey();
+  let h = `
+  <div class="card">
+    <textarea id="dictInput" placeholder="Opowiedz, co robiłeś… np: „O 7 wstałem, o 7:30 się umyłem, o 7:40 zacząłem robić jedzenie i właśnie zjadłem, teraz zaczynam pracować”"></textarea>
+    <div class="btnrow">
+      <button class="btn primary" id="addBtn" style="flex:1">➕ Dodaj do dnia</button>
+    </div>
+    <div class="hint">Dyktuj przez klawiaturę (mikrofon / Wispr Flow). Podawaj godziny — aplikacja sama potnie dzień na bloki i przypisze kategorie.${SET.apiKey?" 🤖 AI włączone.":""}</div>
+  </div>`;
+
+  const ob = day && openBlock(day);
+  if(ob && isToday){
+    const c=CATS[ob.cat];
+    h+=`<div class="blk now" style="border-left-color:${c.c}" data-id="${ob.id}">
+      <div class="bt"><div class="btime">TERAZ · od ${hhmm(ob.s)}</div>
+      <div class="btxt">${c.e} ${esc(ob.txt)}</div><div class="bcat">${c.n}</div></div>
+      <div class="bdur">${durStr(nowMin()-ob.s)}</div>
+      <button class="btn" id="stopBtn" style="padding:8px 10px">⏹</button>
+    </div>`;
+  }
+
+  if(day && day.blocks.length){
+    h+=`<h2>Oś dnia</h2>`;
+    const items=[];
+    const bs=day.blocks;
+    for(let i=0;i<bs.length;i++){
+      if(i>0){
+        const pe = bs[i-1].e===null? nowMin() : bs[i-1].e;
+        if(bs[i].s-pe>4) items.push({gap:true, s:pe, e:bs[i].s});
+      }
+      items.push({b:bs[i]});
+    }
+    const last=bs[bs.length-1];
+    if(isToday && last.e!==null && nowMin()-last.e>14) items.push({gap:true, s:last.e, e:nowMin(), now:true});
+    for(const it of items){
+      if(it.gap){
+        h+=`<div class="gap" data-gs="${it.s}" data-ge="${it.e}">
+          <div class="gq">❔ ${hhmm(it.s)}–${it.now?"teraz":hhmm(it.e)} (${durStr(it.e-it.s)}) — co wtedy robiłeś?</div>
+          <div class="catgrid">${Object.entries(CATS).filter(([k])=>k!=="sen"&&k!=="inne").map(([k,c])=>`<button class="catchip gapcat" data-cat="${k}">${c.e} ${c.n}</button>`).join("")}</div>
+          <div class="gaprow"><input placeholder="albo wpisz co robiłeś…" class="gaptxt"><button class="btn gapok">OK</button></div>
+        </div>`;
+      }else{
+        const b=it.b; if(b.e===null && isToday) continue;
+        const c=CATS[b.cat]||CATS.inne;
+        const e=b.e===null?1439:b.e;
+        h+=`<div class="blk editable" style="border-left-color:${c.c}" data-id="${b.id}">
+          <div class="bt"><div class="btime">${hhmm(b.s)}–${hhmm(e)}</div>
+          <div class="btxt">${c.e} ${esc(b.txt)}</div><div class="bcat">${c.n}</div></div>
+          <div class="bdur">${durStr(e-b.s)}</div>
+        </div>`;
+      }
+    }
+    // podsumowanie
+    h+=`<h2>Podsumowanie dnia</h2><div class="card">
+      <div class="summary" id="sumTxt">${esc(day.summary || makeSummary(CUR))}</div>
+      <div class="btnrow">${SET.apiKey?'<button class="btn" id="aiSumBtn">✨ Podsumuj z AI</button>':""}
+      ${day.summary?'<button class="btn" id="plainSumBtn">Zwykłe podsumowanie</button>':""}</div>
+    </div>`;
+  }else{
+    h+=`<div class="empty">Nic tu jeszcze nie ma.<br>Opowiedz powyżej, co dziś robiłeś 🙂</div>`;
+  }
+  $("#view").innerHTML=h;
+
+  $("#addBtn").onclick=onAdd;
+  const sb=$("#stopBtn"); if(sb) sb.onclick=()=>{ const o=openBlock(getDay(CUR)); if(o){o.e=nowMin(); save(); render();} };
+  document.querySelectorAll(".blk.editable").forEach(el=>el.onclick=()=>openEdit(el.dataset.id));
+  const obEl=document.querySelector(".blk.now"); if(obEl) obEl.querySelector(".bt").onclick=()=>openEdit(obEl.dataset.id);
+  document.querySelectorAll(".gap").forEach(g=>{
+    const s=+g.dataset.gs, e=+g.dataset.ge;
+    g.querySelectorAll(".gapcat").forEach(btn=>btn.onclick=()=>{ fillGap(s,e,CATS[btn.dataset.cat].n,btn.dataset.cat); });
+    g.querySelector(".gapok").onclick=()=>{ const v=g.querySelector(".gaptxt").value.trim(); if(v){ const c=catOf(v); fillGap(s,e,v,c); } };
+    g.querySelector(".gaptxt").addEventListener("keydown",ev=>{ if(ev.key==="Enter") g.querySelector(".gapok").click(); });
+  });
+  const asb=$("#aiSumBtn"); if(asb) asb.onclick=async()=>{ asb.textContent="⏳…"; try{ const s=await aiSummary(CUR); getDay(CUR).summary=s; save(); render(); }catch(e){ asb.textContent="Błąd API"; } };
+  const psb=$("#plainSumBtn"); if(psb) psb.onclick=()=>{ getDay(CUR).summary=""; save(); render(); };
+}
+function fillGap(s,e,txt,cat){ addBlock(getDay(CUR), s, e, txt, cat); save(); render(); }
+async function onAdd(){
+  const inp=$("#dictInput"); const text=inp.value.trim();
+  if(!text) return;
+  const btn=$("#addBtn"); btn.textContent="⏳…"; btn.disabled=true;
+  let events=null;
+  if(SET.apiKey){ try{ events=await aiParse(text, CUR); }catch(e){ events=null; } }
+  if(!events || !events.length) events=parseLocal(text, CUR);
+  if(!events.length){ btn.textContent="Nie zrozumiałem 🤔 spróbuj z godzinami"; btn.disabled=false; setTimeout(()=>{btn.textContent="➕ Dodaj do dnia";},2500); return; }
+  applyEvents(CUR, events);
+  inp.value="";
+  render();
+}
+
+/* ---- edycja bloku ---- */
+function openEdit(id){
+  const day=getDay(CUR); const b=day.blocks.find(x=>x.id===id); if(!b) return;
+  editId=id;
+  $("#emTxt").value=b.txt;
+  $("#emS").value=hhmm(b.s);
+  $("#emE").value=hhmm(b.e===null?nowMin():b.e);
+  $("#emCats").innerHTML=Object.entries(CATS).map(([k,c])=>`<button class="catchip${k===b.cat?" sel":""}" data-cat="${k}">${c.e} ${c.n}</button>`).join("");
+  $("#emCats").querySelectorAll(".catchip").forEach(el=>el.onclick=()=>{ $("#emCats").querySelectorAll(".catchip").forEach(x=>x.classList.remove("sel")); el.classList.add("sel"); });
+  $("#editModal").classList.add("open");
+}
+$("#emCancel").onclick=()=>$("#editModal").classList.remove("open");
+$("#editModal").onclick=e=>{ if(e.target.id==="editModal") $("#editModal").classList.remove("open"); };
+$("#emSave").onclick=()=>{
+  const day=getDay(CUR); const b=day.blocks.find(x=>x.id===editId); if(!b) return;
+  const wasCat=b.cat;
+  b.txt=$("#emTxt").value.trim()||b.txt;
+  const sel=$("#emCats").querySelector(".sel"); if(sel) b.cat=sel.dataset.cat;
+  const pv=v=>{const p=v.split(":");return +p[0]*60+ +p[1];};
+  if($("#emS").value) b.s=pv($("#emS").value);
+  if($("#emE").value) b.e=pv($("#emE").value);
+  if(b.e<=b.s) b.e=b.s+1;
+  if(b.cat!==wasCat) learn(b.txt, b.cat);
+  sortBlocks(day); save();
+  $("#editModal").classList.remove("open"); render();
+};
+$("#emDel").onclick=()=>{
+  const day=getDay(CUR); day.blocks=day.blocks.filter(x=>x.id!==editId);
+  save(); $("#editModal").classList.remove("open"); render();
+};
+
+/* ---- Wykresy ---- */
+function rangeKeys(){
+  const n = RANGE==="day"?1:RANGE==="week"?7:30;
+  const out=[]; for(let i=n-1;i>=0;i--) out.push(shiftKey(CURC,-i));
+  return out;
+}
+function donutSVG(entries, total){
+  const R=52, CX=70, CY=70, CIRC=2*Math.PI*R;
+  let off=0, segs="";
+  for(const [cat,m] of entries){
+    const frac=m/total, len=frac*CIRC;
+    segs+=`<circle r="${R}" cx="${CX}" cy="${CY}" fill="none" stroke="${CATS[cat].c}" stroke-width="20" stroke-dasharray="${len} ${CIRC-len}" stroke-dashoffset="${-off}" transform="rotate(-90 ${CX} ${CY})"/>`;
+    off+=len;
+  }
+  return `<svg width="140" height="140" viewBox="0 0 140 140">${segs}
+    <text x="${CX}" y="${CY-4}" text-anchor="middle" fill="var(--txt)" font-size="16" font-weight="700">${durStr(total).split(" ").slice(0,2).join(" ")}</text>
+    <text x="${CX}" y="${CY+14}" text-anchor="middle" fill="var(--mut)" font-size="11">łącznie</text></svg>`;
+}
+function stripHTML(k, withSen){
+  const day=DB.days[k]; if(!day||!day.blocks.length) return `<div class="strip"></div>`;
+  const now = k===todayKey()? nowMin():1440;
+  let segs="", pos=0;
+  for(const b of day.blocks){
+    const e=b.e===null?now:b.e;
+    if(b.s>pos) segs+=`<div style="width:${(b.s-pos)/14.4}%"></div>`;
+    segs+=`<div title="${esc(b.txt)}" style="width:${(e-b.s)/14.4}%;background:${CATS[b.cat].c}"></div>`;
+    pos=e;
+  }
+  return `<div class="strip">${segs}</div>`;
+}
+function renderCharts(){
+  const keys=rangeKeys();
+  const tot={};
+  for(const k of keys){ const t=dayTotals(k); for(const c in t) tot[c]=(tot[c]||0)+t[c]; }
+  const entries=Object.entries(tot).sort((a,b)=>b[1]-a[1]);
+  const totalAll=entries.reduce((s,[,m])=>s+m,0);
+  const awake=entries.filter(([c])=>c!=="sen").reduce((s,[,m])=>s+m,0);
+
+  let h=`<div class="seg">
+    <button data-r="day" class="${RANGE==="day"?"on":""}">Dzień</button>
+    <button data-r="week" class="${RANGE==="week"?"on":""}">Tydzień</button>
+    <button data-r="month" class="${RANGE==="month"?"on":""}">Miesiąc</button>
+  </div>`;
+
+  if(!totalAll){
+    h+=`<div class="empty">Brak danych w tym okresie 📭</div>`;
+  }else{
+    h+=`<div class="tiles">
+      <div class="tile"><div class="tv" style="color:${CATS.praca.c}">${durStr(tot.praca||0)}</div><div class="tl">💼 praca</div></div>
+      <div class="tile"><div class="tv" style="color:${CATS.strata.c}">${durStr(tot.strata||0)}</div><div class="tl">📱 strata czasu${awake?" · "+Math.round(100*(tot.strata||0)/awake)+"%":""}</div></div>
+    </div>`;
+    h+=`<div class="card"><div class="donutwrap">${donutSVG(entries,totalAll)}
+      <div class="legend">${entries.map(([c,m])=>`<div class="leg"><div class="dot" style="background:${CATS[c].c}"></div><div class="ln">${CATS[c].e} ${CATS[c].n}</div><div class="lv">${durStr(m)} · ${Math.round(100*m/totalAll)}%</div></div>`).join("")}</div>
+    </div></div>`;
+    if(RANGE==="day"){
+      h+=`<div class="card"><div class="srl" style="color:var(--mut);font-size:12px;margin-bottom:4px">Oś dnia (0–24)</div>${stripHTML(CURC)}
+        <div class="striplabels"><span>0</span><span>6</span><span>12</span><span>18</span><span>24</span></div></div>`;
+    }else{
+      h+=`<div class="card">`+keys.slice(RANGE==="week"?0:-14).map(k=>`<div class="striprow"><div class="srl">${dayLabel(k)}</div>${stripHTML(k)}</div>`).join("")+`</div>`;
+    }
+    // samopoczucie / sen w okresie
+    const moods=keys.map(k=>({k, j:(DB.days[k]||{}).journal})).filter(x=>x.j&&(x.j.mood!=null||x.j.sen!=null));
+    if(moods.length>1 && RANGE!=="day"){
+      h+=`<h2>Samopoczucie i sen</h2><div class="card">${lineChart(keys)}</div>`;
+    }
+  }
+  $("#view").innerHTML=h;
+  document.querySelectorAll(".seg button").forEach(b=>b.onclick=()=>{ RANGE=b.dataset.r; render(); });
+}
+function lineChart(keys){
+  const W=480,H=140,P=24;
+  const pts=keys.map((k,i)=>({i,j:(DB.days[k]||{}).journal||{}}));
+  const x=i=>P+(W-2*P)*i/Math.max(1,keys.length-1);
+  const yM=v=>H-P-(H-2*P)*v/10;
+  const yS=v=>H-P-(H-2*P)*Math.min(v,12)/12;
+  const mood=pts.filter(p=>p.j.mood!=null).map(p=>x(p.i)+","+yM(p.j.mood)).join(" ");
+  const sen=pts.filter(p=>p.j.sen!=null).map(p=>x(p.i)+","+yS(p.j.sen)).join(" ");
+  return `<svg class="linechart" viewBox="0 0 ${W} ${H}">
+    <line x1="${P}" y1="${H-P}" x2="${W-P}" y2="${H-P}" stroke="var(--line)"/>
+    ${sen?`<polyline points="${sen}" fill="none" stroke="#7c6ff0" stroke-width="2" stroke-dasharray="4 3"/>`:""}
+    ${mood?`<polyline points="${mood}" fill="none" stroke="#43d97b" stroke-width="2.5"/>`:""}
+    ${pts.filter(p=>p.j.mood!=null).map(p=>`<circle cx="${x(p.i)}" cy="${yM(p.j.mood)}" r="3.5" fill="#43d97b"/>`).join("")}
+    <text x="${P}" y="14" fill="#43d97b" font-size="11">— samopoczucie (1–10)</text>
+    <text x="${W/2+20}" y="14" fill="#7c6ff0" font-size="11">--- sen (h)</text>
+  </svg>`;
+}
+
+/* ---- Dziennik ---- */
+function renderJournal(){
+  const day=DB.days[CUR]; const j=(day&&day.journal)||{};
+  let h=`<div class="card">
+    <textarea id="jTxt" placeholder="Opowiedz o swoim dniu… np: „Dobry dzień, dużo zmontowałem. Samopoczucie 7, spałem 6 godzin, był sport — deskorolka. Stres 3.”">${esc(j.txt||"")}</textarea>
+    <div class="metric"><label>😊 Samopoczucie</label><input type="range" min="1" max="10" id="jMood" value="${j.mood??5}"><div class="mv" id="jMoodV">${j.mood??"–"}</div></div>
+    <div class="metric"><label>⚡ Energia</label><input type="range" min="1" max="10" id="jEn" value="${j.energia??5}"><div class="mv" id="jEnV">${j.energia??"–"}</div></div>
+    <div class="metric"><label>😰 Stres</label><input type="range" min="1" max="10" id="jStr" value="${j.stres??5}"><div class="mv" id="jStrV">${j.stres??"–"}</div></div>
+    <div class="metric"><label>😴 Sen (h)</label><input type="number" min="0" max="16" step="0.5" id="jSen" value="${j.sen??""}" style="width:80px"><label style="width:auto"><input type="checkbox" id="jSport" ${j.sport?"checked":""}> 🏃 sport</label></div>
+    <div class="btnrow"><button class="btn primary" id="jSave" style="flex:1">💾 Zapisz wpis</button></div>
+    <div class="hint">Możesz podyktować wszystko w tekście — suwaki ustawią się same („samopoczucie 7”, „spałem 6 godzin”, „stres 3”, „sport”).</div>
+  </div>`;
+  // historia
+  const past=Object.keys(DB.days).filter(k=>DB.days[k].journal&&DB.days[k].journal.txt).sort().reverse().slice(0,30);
+  if(past.length){
+    h+=`<h2>Poprzednie wpisy</h2><div class="card">`+past.map(k=>{
+      const p=DB.days[k].journal;
+      const chips=[p.mood!=null?"😊 "+p.mood:null,p.energia!=null?"⚡ "+p.energia:null,p.stres!=null?"😰 "+p.stres:null,p.sen!=null?"😴 "+p.sen+" h":null,p.sport?"🏃 sport":null].filter(Boolean);
+      return `<div class="jentry"><div class="jd">${dayLabel(k)} · ${k}</div><div class="jtxt">${esc(p.txt)}</div><div class="jchips">${chips.map(c=>`<span class="jchip">${c}</span>`).join("")}</div></div>`;
+    }).join("")+`</div>`;
+  }
+  $("#view").innerHTML=h;
+  const touched={mood:j.mood!=null,energia:j.energia!=null,stres:j.stres!=null};
+  const bind=(id,vid,key)=>{ const el=$(id); el.oninput=()=>{ $(vid).textContent=el.value; touched[key]=true; }; };
+  bind("#jMood","#jMoodV","mood"); bind("#jEn","#jEnV","energia"); bind("#jStr","#jStrV","stres");
+  $("#jTxt").addEventListener("input",()=>{
+    const p=parseJournal($("#jTxt").value);
+    if(p.mood!=null){ $("#jMood").value=p.mood; $("#jMoodV").textContent=p.mood; touched.mood=true; }
+    if(p.energia!=null){ $("#jEn").value=p.energia; $("#jEnV").textContent=p.energia; touched.energia=true; }
+    if(p.stres!=null){ $("#jStr").value=p.stres; $("#jStrV").textContent=p.stres; touched.stres=true; }
+    if(p.sen!=null) $("#jSen").value=p.sen;
+    if(p.sport) $("#jSport").checked=true;
+  });
+  $("#jSave").onclick=()=>{
+    const txt=$("#jTxt").value.trim();
+    const day=getDay(CUR);
+    day.journal={
+      txt,
+      mood: touched.mood? +$("#jMood").value : (parseJournal(txt).mood ?? null),
+      energia: touched.energia? +$("#jEn").value : (parseJournal(txt).energia ?? null),
+      stres: touched.stres? +$("#jStr").value : (parseJournal(txt).stres ?? null),
+      sen: $("#jSen").value!==""? +$("#jSen").value : null,
+      sport: $("#jSport").checked
+    };
+    save(); render();
+  };
+}
+
+/* ---- Więcej ---- */
+function renderMore(){
+  let h=`<div class="card">
+    <label class="hint" style="margin:0 0 6px">Klucz API Claude (z console.anthropic.com) — opcjonalny, poprawia rozumienie dyktowania i robi ładne podsumowania</label>
+    <input type="password" id="apiKeyInput" placeholder="sk-ant-..." autocomplete="off" style="width:100%" value="${esc(SET.apiKey||"")}">
+    <div class="btnrow">
+      <button class="btn primary" id="saveKeyBtn">Zapisz</button>
+      <button class="btn" id="testKeyBtn">Testuj połączenie</button>
+    </div>
+    <div id="apiStatus"></div>
+  </div>
+  <div class="card">
+    <div class="hint" style="margin:0 0 8px">Dane są tylko na tym telefonie. Rób kopie!</div>
+    <div class="btnrow">
+      <button class="btn" id="expBtn">⬇️ Eksport JSON</button>
+      <button class="btn" id="impBtn">⬆️ Import JSON</button>
+      <button class="btn" id="csvBtn">📄 CSV</button>
+    </div>
+    <input type="file" id="impFile" accept=".json" style="display:none">
+  </div>
+  <div class="card">
+    <div class="btnrow"><button class="btn danger" id="wipeBtn">🗑 Wyczyść wszystkie dane</button></div>
+  </div>
+  <div class="hint" style="text-align:center">Dziennik v1 · dane w localStorage</div>`;
+  $("#view").innerHTML=h;
+  $("#saveKeyBtn").onclick=()=>{ SET.apiKey=$("#apiKeyInput").value.trim(); saveSet(); $("#apiStatus").textContent="Zapisano ✔"; $("#apiStatus").style.color="var(--grn)"; };
+  $("#testKeyBtn").onclick=async()=>{
+    SET.apiKey=$("#apiKeyInput").value.trim(); saveSet();
+    $("#apiStatus").textContent="Testuję…"; $("#apiStatus").style.color="var(--mut)";
+    try{ await callAI("Odpowiedz jednym słowem: OK","test",10); $("#apiStatus").textContent="Działa ✔"; $("#apiStatus").style.color="var(--grn)"; }
+    catch(e){ $("#apiStatus").textContent="Błąd: "+e.message; $("#apiStatus").style.color="var(--red)"; }
+  };
+  $("#expBtn").onclick=()=>{
+    const blob=new Blob([JSON.stringify({db:DB,set:{learned:SET.learned}},null,1)],{type:"application/json"});
+    const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="dziennik-kopia-"+todayKey()+".json"; a.click();
+  };
+  $("#impBtn").onclick=()=>$("#impFile").click();
+  $("#impFile").onchange=e=>{
+    const f=e.target.files[0]; if(!f) return;
+    const r=new FileReader();
+    r.onload=()=>{ try{
+      const d=JSON.parse(r.result);
+      if(d.db&&d.db.days){ DB=d.db; if(d.set&&d.set.learned) SET.learned=Object.assign(SET.learned,d.set.learned); save(); saveSet(); alert("Zaimportowano ✔"); render(); }
+      else alert("Nieprawidłowy plik");
+    }catch(err){ alert("Błąd: "+err.message); } };
+    r.readAsText(f);
+  };
+  $("#csvBtn").onclick=()=>{
+    let csv="data;od;do;minuty;kategoria;opis\n";
+    for(const k of Object.keys(DB.days).sort()){
+      for(const b of DB.days[k].blocks){
+        const e=b.e===null?(k===todayKey()?nowMin():1439):b.e;
+        csv+=[k,hhmm(b.s),hhmm(e),e-b.s,CATS[b.cat].n,'"'+b.txt.replace(/"/g,"'")+'"'].join(";")+"\n";
+      }
+    }
+    const blob=new Blob(["﻿"+csv],{type:"text/csv"});
+    const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="dziennik-"+todayKey()+".csv"; a.click();
+  };
+  $("#wipeBtn").onclick=()=>{ if(confirm("Na pewno usunąć WSZYSTKIE dane? Zrób najpierw eksport!")){ DB={days:{}}; save(); alert("Usunięto"); render(); } };
+}
+
+/* ============ START ============ */
+closeStaleOpen();
+render();
+setInterval(()=>{
+  if(TAB!=="day" || CUR!==todayKey()) return;
+  const i=$("#dictInput");
+  if(i && (i.value.trim()!=="" || document.activeElement===i)) return; // nie kasuj pisanego tekstu
+  if($("#editModal").classList.contains("open")) return;
+  render();
+}, 60000);
+if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+</script>
+</body>
+</html>
